@@ -1,0 +1,133 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile, settings, and preferences",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "displayName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 255 },
+        "phoneNumber": { "type": "string", "maxLength": 50 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string" },
+        "timezone": { "type": "string", "maxLength": 64 },
+        "theme": { "type": "string", "enum": ["light", "dark", "system"] },
+        "weekStartsOn": { "type": "string", "enum": ["sunday", "monday"] },
+        "onboardingCompleted": { "type": "boolean" },
+        "selectedGoals": { "type": "array" },
+        "notificationsEnabled": { "type": "boolean" },
+        "settings": { "type": "object" }
+      },
+      "required": ["uid"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "User habit, routine, or task definition",
+      "type": "object",
+      "properties": {
+        "taskId": { "type": "string", "maxLength": 128 },
+        "uid": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 150 },
+        "description": { "type": "string", "maxLength": 500 },
+        "type": { "type": "string", "enum": ["checkbox", "duration", "quantity", "target"] },
+        "targetValue": { "type": "number" },
+        "targetUnit": { "type": "string", "maxLength": 50 },
+        "categoryId": { "type": "string", "maxLength": 64 },
+        "icon": { "type": "string", "maxLength": 64 },
+        "schedule": { "type": "object" },
+        "reminderTime": { "type": "string", "maxLength": 10 },
+        "reminderEnabled": { "type": "boolean" },
+        "isActive": { "type": "boolean" },
+        "isArchived": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["taskId", "uid", "title", "type"]
+    },
+    "TaskCompletion": {
+      "title": "TaskCompletion",
+      "description": "Individual task completion record for a specific local date",
+      "type": "object",
+      "properties": {
+        "completionId": { "type": "string", "maxLength": 128 },
+        "taskId": { "type": "string", "maxLength": 128 },
+        "uid": { "type": "string", "maxLength": 128 },
+        "localDate": { "type": "string", "maxLength": 10 },
+        "completed": { "type": "boolean" },
+        "actualValue": { "type": "number" },
+        "completedAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["completionId", "taskId", "uid", "localDate", "completed"]
+    },
+    "DailyRecord": {
+      "title": "DailyRecord",
+      "description": "Daily reflection, notes and mood for a specific date",
+      "type": "object",
+      "properties": {
+        "dateId": { "type": "string", "maxLength": 20 },
+        "uid": { "type": "string", "maxLength": 128 },
+        "localDate": { "type": "string", "maxLength": 10 },
+        "note": { "type": "string", "maxLength": 2000 },
+        "mood": { "type": "string", "enum": ["great", "good", "okay", "bad", "none"] },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["dateId", "uid", "localDate"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Category for organizing tasks",
+      "type": "object",
+      "properties": {
+        "categoryId": { "type": "string", "maxLength": 64 },
+        "uid": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 50 },
+        "icon": { "type": "string", "maxLength": 50 },
+        "color": { "type": "string", "maxLength": 50 },
+        "isDefault": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["categoryId", "uid", "name"]
+    },
+    "Achievement": {
+      "title": "Achievement",
+      "description": "Unlocked user achievements",
+      "type": "object",
+      "properties": {
+        "achievementId": { "type": "string", "maxLength": 64 },
+        "uid": { "type": "string", "maxLength": 128 },
+        "key": { "type": "string", "maxLength": 64 },
+        "unlockedAt": { "type": "string" },
+        "progress": { "type": "number" }
+      },
+      "required": ["achievementId", "uid", "key", "unlockedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile document"
+    },
+    "/users/{userId}/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "User habit and routine tasks"
+    },
+    "/users/{userId}/taskCompletions/{completionId}": {
+      "schema": "TaskCompletion",
+      "description": "Historical task completions for local dates"
+    },
+    "/users/{userId}/dailyRecords/{dateId}": {
+      "schema": "DailyRecord",
+      "description": "User daily reflections, notes, and mood"
+    },
+    "/users/{userId}/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "User task categories"
+    },
+    "/users/{userId}/achievements/{achievementId}": {
+      "schema": "Achievement",
+      "description": "User unlocked achievements"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "RoutineFlow",
+  "description": "A complete, production-ready habit, routine, streak, calendar, and analytics tracker.",
+  "requestFramePermissions": ["notifications"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
