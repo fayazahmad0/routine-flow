@@ -135,24 +135,24 @@ export const AnalyticsView: React.FC = () => {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+          <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#1A1A1A] dark:text-[#F3EFEA] tracking-tight">
             Analytics & Insights
           </h2>
-          <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-xs sm:text-sm font-mono text-[#78716C] dark:text-[#A39E96] mt-1">
             Deep dive into your consistency trends, completion rates, and habit strengths.
           </p>
         </div>
 
         {/* Time range switcher */}
-        <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl shrink-0">
+        <div className="flex items-center p-1 bg-[#F2EDE4] dark:bg-[#22211F] rounded-xl shrink-0 border border-[#E2DDD5] dark:border-[#2E2C2A]">
           {(['7d', '14d', '30d'] as const).map((range) => (
             <button
               key={range}
               onClick={() => setTimeRange(range)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
                 timeRange === range
-                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  ? 'bg-white dark:bg-[#1A1918] text-[#1A1A1A] dark:text-[#F3EFEA] shadow-xs'
+                  : 'text-[#78716C] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA]'
               }`}
             >
               Last {range.toUpperCase()}
@@ -162,127 +162,127 @@ export const AnalyticsView: React.FC = () => {
       </div>
 
       {/* KPI Cards Strip */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider">Average Rate</span>
-            <TrendingUp className="w-4 h-4 text-indigo-500" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+        <div className="bg-white dark:bg-[#1A1918] rounded-2xl p-4 sm:p-5 border border-[#E8E3DA] dark:border-[#282725] shadow-xs">
+          <div className="flex items-center justify-between text-[#78716C] dark:text-[#A39E96] mb-2">
+            <span className="text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider">Avg Rate</span>
+            <TrendingUp className="w-4 h-4 text-[#A04000] dark:text-[#E08A50]" />
           </div>
-          <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
+          <p className="font-serif text-2xl sm:text-3xl font-bold text-[#1A1A1A] dark:text-[#F3EFEA]">
             {statsOverview.avgRate}%
           </p>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-medium">
+          <p className="text-[11px] font-mono text-[#78716C] dark:text-[#A39E96] mt-1">
             Over past {timeRange}
           </p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider">Habits Done</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+        <div className="bg-white dark:bg-[#1A1918] rounded-2xl p-4 sm:p-5 border border-[#E8E3DA] dark:border-[#282725] shadow-xs">
+          <div className="flex items-center justify-between text-[#78716C] dark:text-[#A39E96] mb-2">
+            <span className="text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider">Fulfilled</span>
+            <CheckCircle2 className="w-4 h-4 text-[#2D5A43] dark:text-[#68B087]" />
           </div>
-          <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
+          <p className="font-serif text-2xl sm:text-3xl font-bold text-[#1A1A1A] dark:text-[#F3EFEA]">
             {statsOverview.totalDone}
           </p>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-medium">
+          <p className="text-[11px] font-mono text-[#78716C] dark:text-[#A39E96] mt-1">
             Completed tasks
           </p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider">Current Streak</span>
-            <Flame className="w-4 h-4 text-amber-500 fill-amber-500" />
+        <div className="bg-white dark:bg-[#1A1918] rounded-2xl p-4 sm:p-5 border border-[#E8E3DA] dark:border-[#282725] shadow-xs">
+          <div className="flex items-center justify-between text-[#78716C] dark:text-[#A39E96] mb-2">
+            <span className="text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider">Streak</span>
+            <Flame className="w-4 h-4 text-[#A04000] dark:text-[#E08A50] fill-current" />
           </div>
-          <p className="text-2xl sm:text-3xl font-black text-amber-600 dark:text-amber-400">
-            {statsOverview.currentStreak} <span className="text-xs font-medium text-slate-500">days</span>
+          <p className="font-serif text-2xl sm:text-3xl font-bold text-[#A04000] dark:text-[#E08A50]">
+            {statsOverview.currentStreak} <span className="text-xs font-mono text-[#78716C]">d</span>
           </p>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-medium">
-            Best: {statsOverview.longestStreak} days
+          <p className="text-[11px] font-mono text-[#78716C] dark:text-[#A39E96] mt-1">
+            Best: {statsOverview.longestStreak}d
           </p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider">Perfect Days</span>
-            <Award className="w-4 h-4 text-violet-500" />
+        <div className="bg-white dark:bg-[#1A1918] rounded-2xl p-4 sm:p-5 border border-[#E8E3DA] dark:border-[#282725] shadow-xs">
+          <div className="flex items-center justify-between text-[#78716C] dark:text-[#A39E96] mb-2">
+            <span className="text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider">Perfect Days</span>
+            <Award className="w-4 h-4 text-[#2D5A43] dark:text-[#68B087]" />
           </div>
-          <p className="text-2xl sm:text-3xl font-black text-violet-600 dark:text-violet-400">
+          <p className="font-serif text-2xl sm:text-3xl font-bold text-[#2D5A43] dark:text-[#68B087]">
             {statsOverview.perfectDays}
           </p>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-medium">
+          <p className="text-[11px] font-mono text-[#78716C] dark:text-[#A39E96] mt-1">
             100% completed
           </p>
         </div>
       </div>
 
       {/* Daily Trend Chart */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm">
-        <div className="flex items-center justify-between mb-6">
+      <div className="bg-white dark:bg-[#1A1918] rounded-2xl p-4 sm:p-6 border border-[#E8E3DA] dark:border-[#282725] shadow-xs">
+        <div className="flex items-center justify-between mb-4 sm:mb-6">
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+            <h3 className="font-serif text-base sm:text-lg font-bold text-[#1A1A1A] dark:text-[#F3EFEA]">
               Daily Completion Trend (%)
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Your day-by-day consistency rate
+            <p className="text-xs font-mono text-[#78716C] dark:text-[#A39E96] mt-0.5">
+              Your day-by-day consistency cadence
             </p>
           </div>
-          <BarChart3 className="w-5 h-5 text-indigo-500" />
+          <BarChart3 className="w-5 h-5 text-[#A04000] dark:text-[#E08A50]" />
         </div>
 
-        <div className="h-64 w-full">
+        <div className="h-60 sm:h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <XAxis dataKey="day" stroke="#94a3b8" fontSize={11} tickLine={false} />
-              <YAxis stroke="#94a3b8" fontSize={11} domain={[0, 100]} tickLine={false} />
+              <XAxis dataKey="day" stroke="#78716c" fontSize={11} tickLine={false} />
+              <YAxis stroke="#78716c" fontSize={11} domain={[0, 100]} tickLine={false} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#0f172a',
-                  borderRadius: '16px',
-                  border: 'none',
-                  color: '#fff',
+                  backgroundColor: '#1A1A1A',
+                  borderRadius: '12px',
+                  border: '1px solid #33312E',
+                  color: '#FAF8F5',
                   fontSize: '12px',
-                  fontWeight: 'bold',
+                  fontFamily: 'monospace',
                 }}
                 formatter={(value: any) => [`${value}%`, 'Completion Rate']}
               />
-              <Bar dataKey="completionRate" radius={[8, 8, 0, 0]} fill="#6366f1" />
+              <Bar dataKey="completionRate" radius={[6, 6, 0, 0]} fill="#1A1A1A" />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
       {/* Bottom Grid: Habit Breakdown & Category Distribution */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Habit Consistency Ranking */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm">
+        <div className="bg-white dark:bg-[#1A1918] rounded-2xl p-4 sm:p-6 border border-[#E8E3DA] dark:border-[#282725] shadow-xs">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+            <h3 className="font-serif text-base sm:text-lg font-bold text-[#1A1A1A] dark:text-[#F3EFEA]">
               Habit Performance
             </h3>
-            <span className="text-xs font-semibold text-slate-500">Consistency %</span>
+            <span className="text-[11px] font-mono font-semibold text-[#78716C] dark:text-[#A39E96]">Consistency %</span>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3.5">
             {habitConsistencyList.slice(0, 5).map((habit) => (
               <div key={habit.taskId} className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between text-xs font-mono">
+                  <div className="flex items-center gap-2 min-w-0">
                     <div
-                      className="w-6 h-6 rounded-lg flex items-center justify-center text-xs"
-                      style={{ backgroundColor: `${habit.color}15`, color: habit.color }}
+                      className="w-6 h-6 rounded-lg flex items-center justify-center text-xs shrink-0"
+                      style={{ backgroundColor: `${habit.color}18`, color: habit.color }}
                     >
                       <IconRenderer name={habit.icon} className="w-3.5 h-3.5" />
                     </div>
-                    <span className="font-bold text-slate-800 dark:text-slate-200">
+                    <span className="font-bold text-[#1A1A1A] dark:text-[#F3EFEA] truncate">
                       {habit.title}
                     </span>
                   </div>
-                  <span className="font-bold text-slate-900 dark:text-white">{habit.rate}%</span>
+                  <span className="font-bold text-[#1A1A1A] dark:text-[#F3EFEA] shrink-0 ml-2">{habit.rate}%</span>
                 </div>
 
                 {/* Progress Bar */}
-                <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div className="w-full h-2 bg-[#F2EDE4] dark:bg-[#22211F] rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all duration-500"
                     style={{
@@ -297,23 +297,23 @@ export const AnalyticsView: React.FC = () => {
         </div>
 
         {/* Category Breakdown (Donut Chart) */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+        <div className="bg-white dark:bg-[#1A1918] rounded-2xl p-4 sm:p-6 border border-[#E8E3DA] dark:border-[#282725] shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+            <h3 className="font-serif text-base sm:text-lg font-bold text-[#1A1A1A] dark:text-[#F3EFEA]">
               Category Distribution
             </h3>
-            <PieIcon className="w-5 h-5 text-indigo-500" />
+            <PieIcon className="w-5 h-5 text-[#A04000] dark:text-[#E08A50]" />
           </div>
 
-          <div className="h-52 flex items-center justify-center">
+          <div className="h-48 sm:h-52 flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={categoryData}
                   cx="50%"
                   cy="50%"
-                  innerRadius={55}
-                  outerRadius={80}
+                  innerRadius={50}
+                  outerRadius={75}
                   paddingAngle={5}
                   dataKey="value"
                 >
@@ -323,11 +323,12 @@ export const AnalyticsView: React.FC = () => {
                 </Pie>
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#0f172a',
-                    borderRadius: '16px',
-                    border: 'none',
-                    color: '#fff',
+                    backgroundColor: '#1A1A1A',
+                    borderRadius: '12px',
+                    border: '1px solid #33312E',
+                    color: '#FAF8F5',
                     fontSize: '12px',
+                    fontFamily: 'monospace',
                   }}
                 />
               </PieChart>
@@ -335,10 +336,10 @@ export const AnalyticsView: React.FC = () => {
           </div>
 
           {/* Legend */}
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+          <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
             {categoryData.map((item, idx) => (
-              <div key={idx} className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400">
-                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+              <div key={idx} className="flex items-center gap-1.5 text-[11px] font-mono font-semibold text-[#57534E] dark:text-[#A39E96]">
+                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
                 <span>{item.name}</span>
               </div>
             ))}

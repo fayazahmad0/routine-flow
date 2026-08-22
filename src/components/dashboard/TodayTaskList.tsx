@@ -51,127 +51,93 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
     onDeleteTask,
   }) => {
     const currentVal = actualValue ?? (completed ? (task.targetValue || 1) : 0);
+    const hasStepper = task.type === 'duration' || task.type === 'quantity' || task.type === 'target';
 
     return (
       <div
         id={`task-row-${task.taskId}`}
-        className={`relative flex items-center justify-between p-3.5 sm:p-4 rounded-xl border transition-all duration-150 ${
+        className={`relative rounded-2xl border transition-all duration-150 p-3.5 sm:p-4 ${
           completed
-            ? 'bg-[#F4F0E8]/80 dark:bg-[#1E1D1B]/80 border-[#E2DDD5] dark:border-[#2E2C2A]'
-            : 'bg-white dark:bg-[#1A1918] border-[#E8E3DA] dark:border-[#282725] shadow-xs hover:border-[#DCD6CD] dark:hover:border-[#3A3835]'
+            ? 'bg-[#F4F0E8]/85 dark:bg-[#1E1D1B]/90 border-[#DDD7CD] dark:border-[#33302D]'
+            : 'bg-white dark:bg-[#1A1918] border-[#E8E3DA] dark:border-[#282725] shadow-xs hover:border-[#D0C9BE] dark:hover:border-[#3A3835]'
         }`}
       >
-        {/* Left: Checkbox + Icon + Details */}
-        <div className="flex items-center gap-3 sm:gap-3.5 flex-1 min-w-0">
-          {/* Touch-optimized 44x44px Checkbox Area */}
-          <button
-            type="button"
-            onClick={() => onToggle(task.taskId, completed)}
-            id={`task-toggle-${task.taskId}`}
-            className="min-w-[44px] min-h-[44px] -ml-2 p-2 flex items-center justify-center rounded-xl cursor-pointer group"
-            aria-label={`Mark ${task.title} as ${completed ? 'incomplete' : 'completed'}`}
-          >
-            <div
-              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-100 transform active:scale-85 ${
-                completed
-                  ? 'bg-[#1A1A1A] dark:bg-[#F3EFEA] text-[#FAF8F5] dark:text-[#121212] shadow-xs scale-100'
-                  : 'border-2 border-[#DCD6CD] dark:border-[#3E3C39] group-hover:border-[#1A1A1A] dark:group-hover:border-[#F3EFEA] text-transparent bg-transparent'
-              }`}
+        {/* Main Row: Checkbox + Category Icon + Title + Menu */}
+        <div className="flex items-start justify-between gap-2.5 sm:gap-3">
+          {/* Left Group: Checkbox + Category Icon + Title */}
+          <div className="flex items-start gap-2.5 sm:gap-3.5 flex-1 min-w-0">
+            {/* Touch-optimized 44x44px Checkbox Area */}
+            <button
+              type="button"
+              onClick={() => onToggle(task.taskId, completed)}
+              id={`task-toggle-${task.taskId}`}
+              className="min-w-[44px] min-h-[44px] -ml-2 -mt-1 p-2 flex items-center justify-center rounded-xl cursor-pointer group shrink-0"
+              aria-label={`Mark ${task.title} as ${completed ? 'incomplete' : 'completed'}`}
             >
-              <Check
-                className={`w-4 h-4 stroke-[3] transition-opacity duration-100 ${
-                  completed ? 'opacity-100' : 'opacity-0'
-                }`}
-              />
-            </div>
-          </button>
-
-          {/* Category icon badge */}
-          <div
-            className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border border-[#E8E3DA] dark:border-[#2E2C2A] transition-colors"
-            style={{
-              backgroundColor: category?.color ? `${category.color}15` : '#1A1A1A10',
-              color: category?.color || '#1A1A1A',
-            }}
-          >
-            <IconRenderer name={task.icon || category?.icon || 'CheckSquare'} className="w-4 h-4" />
-          </div>
-
-          {/* Task title and metadata */}
-          <div className="min-w-0 flex-1 cursor-pointer" onClick={() => onToggle(task.taskId, completed)}>
-            <div className="flex items-center gap-2">
-              <h4
-                className={`text-sm font-medium tracking-tight truncate transition-colors duration-150 ${
+              <div
+                className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all duration-100 transform active:scale-85 ${
                   completed
-                    ? 'text-[#8C8780] dark:text-[#78716C] line-through opacity-75'
-                    : 'text-[#1A1A1A] dark:text-[#F3EFEA]'
+                    ? 'bg-[#1A1A1A] dark:bg-[#F3EFEA] text-[#FAF8F5] dark:text-[#121212] shadow-xs scale-100 ring-2 ring-[#1A1A1A] dark:ring-[#F3EFEA]'
+                    : 'border-2 border-[#C8C2B7] dark:border-[#4A4744] group-hover:border-[#1A1A1A] dark:group-hover:border-[#F3EFEA] text-transparent bg-transparent'
                 }`}
               >
-                {task.title}
-              </h4>
-              {task.reminderEnabled && task.reminderTime && (
-                <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-[#F2EDE4] dark:bg-[#252422] text-[#78716C] dark:text-[#A39E96]">
-                  <Clock className="w-3 h-3" />
-                  {task.reminderTime}
-                </span>
-              )}
+                <Check
+                  className={`w-4 h-4 stroke-[3] transition-opacity duration-100 ${
+                    completed ? 'opacity-100' : 'opacity-0'
+                  }`}
+                />
+              </div>
+            </button>
+
+            {/* Category icon badge */}
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border border-[#E8E3DA] dark:border-[#2E2C2A] mt-0.5"
+              style={{
+                backgroundColor: category?.color ? `${category.color}18` : '#1A1A1A10',
+                color: category?.color || '#1A1A1A',
+              }}
+            >
+              <IconRenderer name={task.icon || category?.icon || 'CheckSquare'} className="w-4 h-4" />
             </div>
 
-            <div className="flex items-center gap-2 mt-0.5 text-xs text-[#78716C] dark:text-[#A39E96]">
-              {category && (
-                <span className="font-mono text-[11px] uppercase tracking-wider text-[#78716C] dark:text-[#A39E96]">
-                  {category.name}
-                </span>
-              )}
+            {/* Task Title & Reminder */}
+            <div
+              className="min-w-0 flex-1 cursor-pointer pt-0.5"
+              onClick={() => onToggle(task.taskId, completed)}
+            >
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <h4
+                  className={`text-sm sm:text-base font-semibold tracking-tight transition-colors duration-150 leading-snug break-words ${
+                    completed
+                      ? 'text-[#8C8780] dark:text-[#78716C] line-through opacity-80'
+                      : 'text-[#1A1A1A] dark:text-[#F3EFEA]'
+                  }`}
+                >
+                  {task.title}
+                </h4>
 
-              {task.targetValue && (
-                <>
-                  <span>•</span>
-                  <span className="font-mono text-[11px] text-[#A04000] dark:text-[#E08A50]">
-                    Target: {task.targetValue} {task.targetUnit || ''}
+                {task.reminderEnabled && task.reminderTime && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-medium bg-[#F2EDE4] dark:bg-[#252422] text-[#57534E] dark:text-[#A39E96] shrink-0 border border-[#E2DDD5] dark:border-[#353330]">
+                    <Clock className="w-3 h-3 text-[#A04000] dark:text-[#E08A50]" />
+                    {task.reminderTime}
                   </span>
-                </>
+                )}
+              </div>
+
+              {task.description && (
+                <p className="text-xs text-[#78716C] dark:text-[#A39E96] mt-0.5 line-clamp-1">
+                  {task.description}
+                </p>
               )}
             </div>
           </div>
-        </div>
 
-        {/* Right: Quantity/Duration stepper & Actions Menu */}
-        <div className="flex items-center gap-2 shrink-0 ml-2">
-          {/* Stepper for duration/quantity tasks */}
-          {(task.type === 'duration' || task.type === 'quantity' || task.type === 'target') && (
-            <div className="flex items-center bg-[#F2EDE4] dark:bg-[#252422] border border-[#E2DDD5] dark:border-[#353330] rounded-lg p-0.5 text-xs font-mono">
-              <button
-                type="button"
-                onClick={(e) => onDecrement(e, task, currentVal)}
-                className="p-1 text-[#57534E] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded hover:bg-white dark:hover:bg-[#1A1918] transition-colors cursor-pointer"
-                aria-label="Decrease value"
-              >
-                <Minus className="w-3 h-3" />
-              </button>
-
-              <span className="px-2 font-medium text-[#1A1A1A] dark:text-[#F3EFEA]">
-                {currentVal}
-                {task.targetUnit ? ` ${task.targetUnit}` : ''}
-              </span>
-
-              <button
-                type="button"
-                onClick={(e) => onIncrement(e, task, currentVal)}
-                className="p-1 text-[#57534E] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded hover:bg-white dark:hover:bg-[#1A1918] transition-colors cursor-pointer"
-                aria-label="Increase value"
-              >
-                <Plus className="w-3 h-3" />
-              </button>
-            </div>
-          )}
-
-          {/* More Menu Trigger */}
-          <div className="relative">
+          {/* Right: 3-Dots Menu with touch target */}
+          <div className="relative shrink-0 -mr-1 -mt-1">
             <button
               type="button"
               onClick={() => onToggleMenu(task.taskId)}
-              className="p-1.5 text-[#78716C] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded-lg hover:bg-[#F2EDE4] dark:hover:bg-[#252422] transition-colors cursor-pointer"
+              className="min-w-[40px] min-h-[40px] flex items-center justify-center p-2 text-[#78716C] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded-xl hover:bg-[#F2EDE4] dark:hover:bg-[#252422] transition-colors cursor-pointer"
               aria-label="Task options"
             >
               <MoreVertical className="w-4 h-4" />
@@ -179,17 +145,17 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
 
             {/* Dropdown Menu */}
             {isMenuOpen && (
-              <div className="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-[#1E1D1B] rounded-xl shadow-lg border border-[#E8E3DA] dark:border-[#2E2C2A] py-1.5 z-20">
+              <div className="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-[#1E1D1B] rounded-2xl shadow-xl border border-[#E8E3DA] dark:border-[#2E2C2A] py-1.5 z-30">
                 <button
                   type="button"
                   onClick={() => {
                     onToggleMenu(task.taskId);
                     onEditTask(task);
                   }}
-                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-[#1A1A1A] dark:text-[#F3EFEA] hover:bg-[#F2EDE4] dark:hover:bg-[#252422] text-left cursor-pointer"
+                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs font-semibold text-[#1A1A1A] dark:text-[#F3EFEA] hover:bg-[#F2EDE4] dark:hover:bg-[#252422] text-left cursor-pointer"
                 >
                   <Edit2 className="w-3.5 h-3.5 text-[#78716C]" />
-                  Edit Entry
+                  Edit Routine
                 </button>
                 <button
                   type="button"
@@ -197,7 +163,7 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
                     onToggleMenu(task.taskId);
                     onArchiveTask(task.taskId);
                   }}
-                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-[#1A1A1A] dark:text-[#F3EFEA] hover:bg-[#F2EDE4] dark:hover:bg-[#252422] text-left cursor-pointer"
+                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs font-semibold text-[#1A1A1A] dark:text-[#F3EFEA] hover:bg-[#F2EDE4] dark:hover:bg-[#252422] text-left cursor-pointer"
                 >
                   <Archive className="w-3.5 h-3.5 text-[#78716C]" />
                   Archive
@@ -208,7 +174,7 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
                     onToggleMenu(task.taskId);
                     onDeleteTask(task.taskId);
                   }}
-                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-[#991B1B] dark:text-[#EF4444] hover:bg-[#FBEBEB] dark:hover:bg-[#351C1C] text-left cursor-pointer"
+                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs font-semibold text-[#B91C1C] dark:text-[#F87171] hover:bg-[#FEE2E2] dark:hover:bg-[#3E1A1A] text-left cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   Delete
@@ -216,6 +182,63 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
               </div>
             )}
           </div>
+        </div>
+
+        {/* Sub-row: Category Chip + Target Badge + Mobile-Friendly Stepper */}
+        <div className="mt-2.5 pt-2 border-t border-[#EDE7DD] dark:border-[#282725] flex flex-wrap items-center justify-between gap-2 text-xs">
+          {/* Left Metadata Chips */}
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            {category && (
+              <span
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-mono uppercase tracking-wider font-semibold border"
+                style={{
+                  backgroundColor: category.color ? `${category.color}15` : '#1A1A1A10',
+                  color: category.color || '#1A1A1A',
+                  borderColor: category.color ? `${category.color}35` : '#1A1A1A25',
+                }}
+              >
+                <span
+                  className="w-1.5 h-1.5 rounded-full shrink-0"
+                  style={{ backgroundColor: category.color || '#1A1A1A' }}
+                />
+                {category.name}
+              </span>
+            )}
+
+            {task.targetValue && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#F2EDE4] dark:bg-[#242220] border border-[#E2DDD5] dark:border-[#353330] rounded-lg text-[11px] font-mono text-[#8A4A28] dark:text-[#E08A50] font-semibold">
+                🎯 Target: {task.targetValue} {task.targetUnit || ''}
+              </span>
+            )}
+          </div>
+
+          {/* Right Stepper (for duration/quantity/target tasks) */}
+          {hasStepper && (
+            <div className="flex items-center bg-[#F2EDE4] dark:bg-[#252422] border border-[#DDD7CD] dark:border-[#353330] rounded-xl p-0.5 text-xs font-mono shadow-2xs shrink-0 ml-auto">
+              <button
+                type="button"
+                onClick={(e) => onDecrement(e, task, currentVal)}
+                className="w-8 h-8 flex items-center justify-center text-[#57534E] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded-lg hover:bg-white dark:hover:bg-[#1A1918] active:scale-85 transition-all cursor-pointer"
+                aria-label="Decrease value"
+              >
+                <Minus className="w-3.5 h-3.5 stroke-[2.5]" />
+              </button>
+
+              <span className="px-2.5 font-bold text-[#1A1A1A] dark:text-[#F3EFEA] min-w-[50px] text-center">
+                {currentVal}
+                {task.targetUnit ? ` ${task.targetUnit}` : ''}
+              </span>
+
+              <button
+                type="button"
+                onClick={(e) => onIncrement(e, task, currentVal)}
+                className="w-8 h-8 flex items-center justify-center text-[#57534E] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded-lg hover:bg-white dark:hover:bg-[#1A1918] active:scale-85 transition-all cursor-pointer"
+                aria-label="Increase value"
+              >
+                <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );

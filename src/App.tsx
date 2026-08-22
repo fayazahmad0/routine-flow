@@ -109,7 +109,7 @@ const AppContent: React.FC = () => {
       <Sidebar activeTab={activeTab} onSelectTab={setActiveTab} />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-screen overflow-x-hidden pb-20 md:pb-8">
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen overflow-x-hidden pb-28 sm:pb-32 md:pb-8">
         <Header
           activeTab={activeTab}
           onSelectTab={setActiveTab}

@@ -93,10 +93,10 @@ export const SettingsView: React.FC = () => {
     <div className="space-y-6 max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
       {/* Header */}
       <div>
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+        <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#1A1A1A] dark:text-[#F3EFEA] tracking-tight">
           Settings & Preferences
         </h2>
-        <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
+        <p className="text-xs sm:text-sm font-mono text-[#78716C] dark:text-[#A39E96] mt-1">
           Customize your profile, routine categories, theme, and schedule preferences.
         </p>
       </div>
@@ -104,35 +104,35 @@ export const SettingsView: React.FC = () => {
       {/* Profile Form */}
       <form
         onSubmit={handleSaveProfile}
-        className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4"
+        className="bg-white dark:bg-[#1A1918] rounded-2xl p-5 sm:p-6 border border-[#E8E3DA] dark:border-[#282725] shadow-xs space-y-4"
       >
-        <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-          <User className="w-4 h-4 text-indigo-500" />
+        <h3 className="font-serif text-sm font-bold text-[#1A1A1A] dark:text-[#F3EFEA] tracking-tight flex items-center gap-2">
+          <User className="w-4 h-4 text-[#A04000] dark:text-[#E08A50]" />
           Profile Information
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+            <label className="block text-xs font-mono font-semibold text-[#57534E] dark:text-[#A39E96] mb-1.5">
               Display Name
             </label>
             <input
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-2xl text-sm font-medium text-slate-900 dark:text-white"
+              className="w-full px-3.5 py-2.5 bg-[#FAF8F5] dark:bg-[#161616] border border-[#E8E3DA] dark:border-[#282725] rounded-xl text-xs sm:text-sm font-medium text-[#1A1A1A] dark:text-[#F3EFEA] focus:outline-none focus:border-[#1A1A1A] dark:focus:border-[#F3EFEA]"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+            <label className="block text-xs font-mono font-semibold text-[#57534E] dark:text-[#A39E96] mb-1.5">
               Timezone
             </label>
             <input
               type="text"
               disabled
               value={timezone}
-              className="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl text-sm text-slate-500 font-mono"
+              className="w-full px-3.5 py-2.5 bg-[#F2EDE4] dark:bg-[#22211F] border border-[#E2DDD5] dark:border-[#2E2C2A] rounded-xl text-xs sm:text-sm text-[#78716C] dark:text-[#A39E96] font-mono"
             />
           </div>
         </div>
@@ -141,7 +141,7 @@ export const SettingsView: React.FC = () => {
           <button
             type="submit"
             disabled={isSavingProfile}
-            className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#1A1A1A] hover:bg-[#33312E] dark:bg-[#F3EFEA] dark:text-[#121212] dark:hover:bg-[#E2DDD5] text-[#FAF8F5] text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
           >
             <Save className="w-3.5 h-3.5" />
             {isSavingProfile ? 'Saving...' : 'Save Profile'}
@@ -150,16 +150,16 @@ export const SettingsView: React.FC = () => {
       </form>
 
       {/* Theme & Display Preferences */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
-        <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-          <Moon className="w-4 h-4 text-indigo-500" />
+      <div className="bg-white dark:bg-[#1A1918] rounded-2xl p-5 sm:p-6 border border-[#E8E3DA] dark:border-[#282725] shadow-xs space-y-4">
+        <h3 className="font-serif text-sm font-bold text-[#1A1A1A] dark:text-[#F3EFEA] tracking-tight flex items-center gap-2">
+          <Moon className="w-4 h-4 text-[#A04000] dark:text-[#E08A50]" />
           Appearance & Calendar
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* Theme Selector */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
+            <label className="block text-xs font-mono font-semibold text-[#57534E] dark:text-[#A39E96] mb-2">
               Theme Mode
             </label>
             <div className="grid grid-cols-3 gap-2">
@@ -177,8 +177,8 @@ export const SettingsView: React.FC = () => {
                     onClick={() => setTheme(t.id)}
                     className={`flex items-center justify-center gap-1.5 p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                       isSelected
-                        ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-900 dark:text-indigo-200 ring-1 ring-indigo-600'
-                        : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
+                        ? 'border-[#1A1A1A] dark:border-[#F3EFEA] bg-[#F2EDE4] dark:bg-[#252422] text-[#1A1A1A] dark:text-[#F3EFEA] ring-1 ring-[#1A1A1A] dark:ring-[#F3EFEA]'
+                        : 'border-[#E8E3DA] dark:border-[#282725] text-[#78716C] dark:text-[#A39E96] hover:bg-[#F2EDE4] dark:hover:bg-[#252422]'
                     }`}
                   >
                     <Icon className="w-3.5 h-3.5" />
@@ -191,7 +191,7 @@ export const SettingsView: React.FC = () => {
 
           {/* First Day of Week */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
+            <label className="block text-xs font-mono font-semibold text-[#57534E] dark:text-[#A39E96] mb-2">
               First Day of Week
             </label>
             <div className="grid grid-cols-2 gap-2">
@@ -205,8 +205,8 @@ export const SettingsView: React.FC = () => {
                   onClick={() => setFirstDayOfWeek(d.id)}
                   className={`p-2.5 rounded-xl border text-xs font-bold transition-all text-center cursor-pointer ${
                     firstDayOfWeek === d.id
-                      ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-900 dark:text-indigo-200 ring-1 ring-indigo-600'
-                      : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
+                      ? 'border-[#1A1A1A] dark:border-[#F3EFEA] bg-[#F2EDE4] dark:bg-[#252422] text-[#1A1A1A] dark:text-[#F3EFEA] ring-1 ring-[#1A1A1A] dark:ring-[#F3EFEA]'
+                      : 'border-[#E8E3DA] dark:border-[#282725] text-[#78716C] dark:text-[#A39E96] hover:bg-[#F2EDE4] dark:hover:bg-[#252422]'
                   }`}
                 >
                   {d.label}
@@ -218,9 +218,9 @@ export const SettingsView: React.FC = () => {
       </div>
 
       {/* Category Management */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
-        <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-          <FolderPlus className="w-4 h-4 text-indigo-500" />
+      <div className="bg-white dark:bg-[#1A1918] rounded-2xl p-5 sm:p-6 border border-[#E8E3DA] dark:border-[#282725] shadow-xs space-y-4">
+        <h3 className="font-serif text-sm font-bold text-[#1A1A1A] dark:text-[#F3EFEA] tracking-tight flex items-center gap-2">
+          <FolderPlus className="w-4 h-4 text-[#A04000] dark:text-[#E08A50]" />
           Manage Categories
         </h3>
 
@@ -229,14 +229,14 @@ export const SettingsView: React.FC = () => {
           {categories.map((cat) => (
             <div
               key={cat.categoryId}
-              className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200/80 dark:border-slate-800"
+              className="flex items-center justify-between p-3 rounded-xl bg-[#FAF8F5] dark:bg-[#161616] border border-[#E8E3DA] dark:border-[#282725]"
             >
               <div className="flex items-center gap-2 min-w-0">
                 <span
                   className="w-3 h-3 rounded-full shrink-0"
                   style={{ backgroundColor: cat.color || '#6366f1' }}
                 />
-                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                <span className="text-xs font-bold text-[#1A1A1A] dark:text-[#F3EFEA] truncate">
                   {cat.name}
                 </span>
               </div>
@@ -245,7 +245,7 @@ export const SettingsView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsDeletingCatId(cat.categoryId)}
-                  className="p-1 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                  className="p-1 text-[#78716C] hover:text-[#B91C1C] dark:hover:text-[#F87171] rounded-lg hover:bg-[#FEE2E2] dark:hover:bg-[#3E1A1A] cursor-pointer"
                   title="Delete Category"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -262,18 +262,18 @@ export const SettingsView: React.FC = () => {
             placeholder="New Category Name..."
             value={newCatName}
             onChange={(e) => setNewCatName(e.target.value)}
-            className="flex-1 px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-medium"
+            className="flex-1 px-3.5 py-2 bg-[#FAF8F5] dark:bg-[#161616] border border-[#E8E3DA] dark:border-[#282725] rounded-xl text-xs font-medium text-[#1A1A1A] dark:text-[#F3EFEA] focus:outline-none focus:border-[#1A1A1A] dark:focus:border-[#F3EFEA]"
           />
           <input
             type="color"
             value={newCatColor}
             onChange={(e) => setNewCatColor(e.target.value)}
-            className="w-9 h-9 rounded-xl border-0 cursor-pointer"
+            className="w-9 h-9 rounded-xl border-0 cursor-pointer bg-transparent"
           />
           <button
             type="submit"
             disabled={!newCatName.trim()}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl disabled:opacity-50"
+            className="px-4 py-2 bg-[#1A1A1A] hover:bg-[#33312E] dark:bg-[#F3EFEA] dark:text-[#121212] dark:hover:bg-[#E2DDD5] text-[#FAF8F5] text-xs font-bold rounded-xl disabled:opacity-50 cursor-pointer transition-all"
           >
             Add
           </button>
@@ -281,12 +281,12 @@ export const SettingsView: React.FC = () => {
       </div>
 
       {/* Danger / Reset Zone */}
-      <div className="bg-rose-50/50 dark:bg-rose-950/20 rounded-3xl p-6 border border-rose-200/80 dark:border-rose-900/40 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div className="bg-[#FFF5F5] dark:bg-[#2A1616] rounded-2xl p-5 sm:p-6 border border-[#FCDADA] dark:border-[#4E2424] flex flex-col sm:flex-row items-center justify-between gap-4">
         <div>
-          <h4 className="text-sm font-bold text-rose-900 dark:text-rose-300">
+          <h4 className="font-serif text-sm font-bold text-[#991B1B] dark:text-[#FCA5A5]">
             Reset Routine Templates
           </h4>
-          <p className="text-xs text-rose-700/80 dark:text-rose-400/80 mt-0.5">
+          <p className="text-xs text-[#B91C1C]/80 dark:text-[#F87171]/80 mt-0.5 font-mono">
             Reload standard starter habits (Study, Fitness, Sleep, Reading, Hydration).
           </p>
         </div>
@@ -294,7 +294,7 @@ export const SettingsView: React.FC = () => {
         <button
           type="button"
           onClick={() => setIsResetModalOpen(true)}
-          className="px-4 py-2 bg-white dark:bg-slate-900 border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 text-xs font-bold rounded-xl transition-all"
+          className="px-4 py-2 bg-white dark:bg-[#1A1918] border border-[#F87171] dark:border-[#991B1B] text-[#B91C1C] dark:text-[#FCA5A5] hover:bg-[#FEE2E2] dark:hover:bg-[#3E1A1A] text-xs font-bold rounded-xl transition-all cursor-pointer"
         >
           Reset Routines
         </button>
@@ -305,7 +305,7 @@ export const SettingsView: React.FC = () => {
         <button
           type="button"
           onClick={signOut}
-          className="flex items-center gap-2 px-6 py-3 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white text-xs font-bold rounded-2xl shadow-sm transition-all cursor-pointer"
+          className="flex items-center gap-2 px-6 py-3 bg-[#1A1A1A] hover:bg-[#33312E] dark:bg-[#F3EFEA] dark:text-[#121212] dark:hover:bg-[#E2DDD5] text-[#FAF8F5] text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
         >
           <LogOut className="w-4 h-4" />
           Sign Out of RoutineFlow

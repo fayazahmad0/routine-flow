@@ -128,10 +128,10 @@ export const HistoryView: React.FC = () => {
       {/* Header & Export CTAs */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-            Activity History
+          <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#1A1A1A] dark:text-[#F3EFEA] tracking-tight">
+            Activity Archive
           </h2>
-          <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-xs sm:text-sm font-mono text-[#78716C] dark:text-[#A39E96] mt-1">
             Browse through your daily records, reflection notes, and past completions.
           </p>
         </div>
@@ -140,7 +140,7 @@ export const HistoryView: React.FC = () => {
           <button
             id="export-csv-btn"
             onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-[#1A1918] border border-[#E8E3DA] dark:border-[#282725] hover:bg-[#F2EDE4] dark:hover:bg-[#252422] text-[#1A1A1A] dark:text-[#F3EFEA] text-xs font-mono font-bold rounded-xl transition-all shadow-xs cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
             Export CSV
@@ -148,7 +148,7 @@ export const HistoryView: React.FC = () => {
           <button
             id="export-json-btn"
             onClick={handleExportJSON}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-[#1A1A1A] hover:bg-[#33312E] dark:bg-[#F3EFEA] dark:text-[#121212] dark:hover:bg-[#E2DDD5] text-[#FAF8F5] text-xs font-mono font-bold rounded-xl shadow-xs transition-all cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
             Backup JSON
@@ -157,29 +157,29 @@ export const HistoryView: React.FC = () => {
       </div>
 
       {/* Filter Strip */}
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col sm:flex-row gap-2.5">
         {/* Search */}
         <div className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[#78716C] absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Search notes or dates (e.g. 2026-08)..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-medium text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-[#1A1918] border border-[#E8E3DA] dark:border-[#282725] rounded-xl text-xs font-mono text-[#1A1A1A] dark:text-[#F3EFEA] placeholder-[#A8A29E] dark:placeholder-[#66625D] focus:outline-none focus:border-[#1A1A1A] dark:focus:border-[#F3EFEA]"
           />
         </div>
 
         {/* Status filter */}
-        <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl shrink-0">
+        <div className="flex items-center p-1 bg-[#F2EDE4] dark:bg-[#22211F] rounded-xl shrink-0 border border-[#E2DDD5] dark:border-[#2E2C2A]">
           {(['all', 'perfect', 'incomplete'] as const).map((s) => (
             <button
               key={s}
               onClick={() => setStatusFilter(s)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold capitalize transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold capitalize transition-all cursor-pointer ${
                 statusFilter === s
-                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  ? 'bg-white dark:bg-[#1A1918] text-[#1A1A1A] dark:text-[#F3EFEA] shadow-xs'
+                  : 'text-[#78716C] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA]'
               }`}
             >
               {s}
@@ -189,7 +189,7 @@ export const HistoryView: React.FC = () => {
       </div>
 
       {/* History List */}
-      <div className="space-y-3">
+      <div className="space-y-2.5">
         <AnimatePresence>
           {filteredHistory.map(({ dateStr, perf }) => {
             const isToday = dateStr === todayDateStr;
@@ -201,38 +201,38 @@ export const HistoryView: React.FC = () => {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 onClick={() => setSelectedDateStr(dateStr)}
-                className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-5 rounded-3xl border transition-all cursor-pointer ${
+                className={`flex flex-col sm:flex-row sm:items-center justify-between p-3.5 sm:p-4 rounded-xl border transition-all cursor-pointer ${
                   isToday
-                    ? 'bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-200 dark:border-indigo-900/50'
-                    : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-xs'
+                    ? 'bg-white dark:bg-[#1A1918] border-[#1A1A1A] dark:border-[#F3EFEA] ring-1 ring-[#1A1A1A] dark:ring-[#F3EFEA]'
+                    : 'bg-white dark:bg-[#1A1918] border-[#E8E3DA] dark:border-[#282725] hover:border-[#D0C9BE] dark:hover:border-[#383633] shadow-xs'
                 }`}
               >
                 {/* Left: Date & Mood */}
-                <div className="flex items-center gap-3.5 mb-2 sm:mb-0">
+                <div className="flex items-center gap-3 mb-2 sm:mb-0">
                   <div
-                    className={`w-12 h-12 rounded-2xl flex flex-col items-center justify-center shrink-0 font-bold ${
+                    className={`w-11 h-11 rounded-lg flex flex-col items-center justify-center shrink-0 font-mono font-bold ${
                       perf.isPerfect
-                        ? 'bg-emerald-500 text-white'
+                        ? 'bg-[#2D5A43] text-white dark:bg-[#68B087] dark:text-[#121212]'
                         : perf.completionRate >= 50
-                        ? 'bg-amber-500 text-white'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                        ? 'bg-[#A04000] text-white dark:bg-[#E08A50] dark:text-[#121212]'
+                        : 'bg-[#F2EDE4] dark:bg-[#22211F] text-[#78716C] dark:text-[#A39E96]'
                     }`}
                   >
-                    <span className="text-xs uppercase leading-none">
+                    <span className="text-[10px] uppercase leading-none">
                       {formatDayName(new Date(dateStr + 'T00:00:00'))}
                     </span>
-                    <span className="text-sm font-black mt-0.5">
+                    <span className="text-xs font-bold mt-0.5">
                       {new Date(dateStr + 'T00:00:00').getDate()}
                     </span>
                   </div>
 
                   <div>
                     <div className="flex items-center gap-2">
-                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                      <h4 className="font-serif text-sm font-bold text-[#1A1A1A] dark:text-[#F3EFEA]">
                         {formatFullDate(dateStr)}
                       </h4>
                       {isToday && (
-                        <span className="px-2 py-0.5 text-[10px] font-black uppercase bg-indigo-600 text-white rounded-full">
+                        <span className="px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase bg-[#1A1A1A] text-[#FAF8F5] dark:bg-[#F3EFEA] dark:text-[#121212] rounded-md">
                           Today
                         </span>
                       )}
@@ -244,36 +244,36 @@ export const HistoryView: React.FC = () => {
                     </div>
 
                     {perf.record?.note ? (
-                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 line-clamp-1 italic">
+                      <p className="text-xs text-[#57534E] dark:text-[#A39E96] mt-0.5 line-clamp-1 italic">
                         "{perf.record.note}"
                       </p>
                     ) : (
-                      <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                        {perf.completedCount} of {perf.totalScheduled} habits completed
+                      <p className="text-[11px] font-mono text-[#78716C] dark:text-[#78716C] mt-0.5">
+                        {perf.completedCount} of {perf.totalScheduled} habits fulfilled
                       </p>
                     )}
                   </div>
                 </div>
 
                 {/* Right: Completion Percentage & Mini bar */}
-                <div className="flex items-center gap-4 sm:justify-end">
-                  <div className="text-right">
-                    <span className="text-xs font-black text-slate-900 dark:text-white">
+                <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-[#F2EDE4] dark:border-[#22211F]">
+                  <div className="sm:text-right">
+                    <span className="text-xs font-mono font-bold text-[#1A1A1A] dark:text-[#F3EFEA]">
                       {perf.completionRate}%
                     </span>
-                    <p className="text-[10px] text-slate-400 font-medium">
-                      {perf.completedCount}/{perf.totalScheduled} done
+                    <p className="text-[10px] font-mono text-[#78716C] dark:text-[#A39E96]">
+                      {perf.completedCount}/{perf.totalScheduled}
                     </p>
                   </div>
 
-                  <div className="w-24 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                  <div className="w-20 sm:w-24 h-2 bg-[#F2EDE4] dark:bg-[#22211F] rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full ${
                         perf.isPerfect
-                          ? 'bg-emerald-500'
+                          ? 'bg-[#2D5A43] dark:bg-[#68B087]'
                           : perf.completionRate >= 50
-                          ? 'bg-amber-500'
-                          : 'bg-rose-400'
+                          ? 'bg-[#A04000] dark:bg-[#E08A50]'
+                          : 'bg-[#B91C1C]'
                       }`}
                       style={{ width: `${perf.completionRate}%` }}
                     />
