@@ -8,11 +8,14 @@ import React, {
   useContext,
   useEffect,
   useState,
+  useRef,
 } from 'react';
 import {
   User as FirebaseUser,
   onAuthStateChanged,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signInAnonymously,
   signOut as fbSignOut,
   RecaptchaVerifier,
@@ -22,7 +25,6 @@ import {
 } from 'firebase/auth';
 import {
   doc,
-  getDoc,
   setDoc,
   updateDoc,
   collection,
@@ -31,8 +33,8 @@ import {
   onSnapshot,
 } from 'firebase/firestore';
 import { auth, db, googleProvider, handleFirestoreError, OperationType, testFirebaseConnection } from '../lib/firebase';
-import { UserProfile, ThemePreference, WeekStartDay } from '../types';
-import { getLocalDateString } from '../utils/dateUtils';
+import firebaseConfig from '../../firebase-applet-config.json';
+import { UserProfile } from '../types';
 
 declare global {
   interface Window {
@@ -46,9 +48,7 @@ interface AuthContextType {
   userProfile: UserProfile | null;
   loading: boolean;
   isFirebaseConnected: boolean;
-  isDemoPhoneActive: boolean;
-  demoPhoneNumber: string | null;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: (useRedirect?: boolean) => Promise<void>;
   signInAsGuest: () => Promise<void>;
   sendPhoneOtp: (phoneNumber: string, appVerifierContainerId: string) => Promise<boolean>;
   verifyPhoneOtp: (otp: string) => Promise<boolean>;
@@ -68,30 +68,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState<boolean>(true);
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [isDemoPhoneActive, setIsDemoPhoneActive] = useState<boolean>(false);
-  const [demoPhoneNumber, setDemoPhoneNumber] = useState<string | null>(null);
+
+  // Safely hold current active confirmationResult
+  const confirmationResultRef = useRef<ConfirmationResult | null>(null);
 
   const clearError = () => setError(null);
-
-  // Check local demo session on boot
-  useEffect(() => {
-    try {
-      const savedDemo = localStorage.getItem('routineflow_demo_session');
-      if (savedDemo && !auth.currentUser) {
-        const parsed = JSON.parse(savedDemo);
-        setUser(parsed.user as FirebaseUser);
-        setUserProfile(parsed.profile as UserProfile);
-      }
-    } catch (e) {
-      console.warn('Could not restore demo session:', e);
-    }
-  }, []);
 
   // Test connection on boot
   useEffect(() => {
     testFirebaseConnection().then((connected) => {
       setIsFirebaseConnected(connected);
     });
+  }, []);
+
+  // Handle redirect result if user returned from Google Redirect flow
+  useEffect(() => {
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) {
+          console.log('[RoutineFlow Auth] Successfully authenticated via redirect:', result.user.uid);
+          setUser(result.user);
+        }
+      })
+      .catch((err: any) => {
+        console.error('[RoutineFlow Auth] Redirect sign-in error:', err);
+        mapGoogleAuthError(err);
+      });
   }, []);
 
   // Listen to Auth State
@@ -175,23 +177,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
+  // Helper to map Google Authentication errors with detailed troubleshooting guidance
+  const mapGoogleAuthError = (err: any) => {
+    const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'unknown';
+    console.error('[RoutineFlow Auth] Google Sign-In Diagnostic:', {
+      method: 'signInWithGoogle',
+      hostname: currentHost,
+      projectId: firebaseConfig.projectId,
+      errorCode: err?.code,
+      errorMessage: err?.message,
+      customData: err?.customData,
+    });
+
+    if (err?.code === 'auth/unauthorized-domain') {
+      setError(
+        `Google Sign-In is not authorized for domain "${currentHost}". Please add "${currentHost}" in Firebase Console > Authentication > Settings > Authorized Domains.`
+      );
+    } else if (err?.code === 'auth/operation-not-allowed') {
+      setError(
+        'Google Sign-In is not enabled for this project. Please enable "Google" under Authentication > Sign-in method in Firebase Console.'
+      );
+    } else if (err?.code === 'auth/popup-closed-by-user') {
+      setError('Sign-in popup was closed before completion. Please try again.');
+    } else if (err?.code === 'auth/popup-blocked') {
+      setError(
+        'Popup window was blocked by your browser. Please allow popups or open the app in a new browser tab.'
+      );
+    } else if (err?.code === 'auth/cancelled-popup-request') {
+      setError('A sign-in window was already open. Please try again.');
+    } else if (err?.code === 'auth/network-request-failed') {
+      setError('Network connection error. Please check your internet connection and try again.');
+    } else if (err?.code === 'auth/invalid-api-key') {
+      setError('Invalid Firebase API key. Please check your project configuration.');
+    } else {
+      setError(
+        `Google Sign-In failed (${err?.code || 'unknown'}): ${err?.message || 'Please check your connection and Firebase Console settings.'}`
+      );
+    }
+  };
+
   // Google Sign-in
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (useRedirect: boolean = false) => {
     try {
       setError(null);
       setLoading(true);
-      await signInWithPopup(auth, googleProvider);
-    } catch (err: any) {
-      console.error('Google sign-in error:', err);
-      if (err.code === 'auth/popup-closed-by-user') {
-        setError('Sign-in was closed before completion. Please click Continue with Google again.');
-      } else if (err.code === 'auth/popup-blocked') {
-        setError('Popup was blocked by your browser. Please allow popups or use Continue as Guest.');
-      } else if (err.code === 'auth/network-request-failed') {
-        setError('Network error. Please check your internet connection.');
+      console.log('[RoutineFlow Auth] Initiating Google Sign-In on hostname:', window.location.hostname);
+
+      if (useRedirect) {
+        await signInWithRedirect(auth, googleProvider);
       } else {
-        setError('Unable to sign in with Google. Please try again or continue as Guest.');
+        await signInWithPopup(auth, googleProvider);
       }
+    } catch (err: any) {
+      mapGoogleAuthError(err);
       setLoading(false);
       throw err;
     }
@@ -204,43 +242,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(true);
       await signInAnonymously(auth);
     } catch (err: any) {
-      console.warn('Firebase anonymous auth restricted/disabled, activating demo guest session:', err);
-      const guestUid = 'guest_' + Math.random().toString(36).substring(2, 10);
-      const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-      const guestUser = {
-        uid: guestUid,
-        displayName: 'Guest Explorer',
-        email: null,
-        phoneNumber: null,
-        photoURL: null,
-      } as unknown as FirebaseUser;
-
-      const guestProfile: UserProfile = {
-        uid: guestUid,
-        displayName: 'Guest Explorer',
-        email: null,
-        phoneNumber: null,
-        photoURL: null,
-        createdAt: new Date().toISOString(),
-        timezone: detectedTz,
-        theme: 'system',
-        weekStartsOn: 'monday',
-        onboardingCompleted: false,
-        selectedGoals: ['Productivity', 'Health'],
-        notificationsEnabled: false,
-      };
-
-      try {
-        localStorage.setItem(
-          'routineflow_demo_session',
-          JSON.stringify({ user: guestUser, profile: guestProfile })
+      console.error('[RoutineFlow Auth] Anonymous auth error:', err);
+      if (err.code === 'auth/operation-not-allowed') {
+        setError(
+          'Anonymous guest sign-in is not enabled in Firebase Console. Please enable "Anonymous" under Authentication > Sign-in method.'
         );
-      } catch (e) {
-        console.warn('Could not persist guest session to localStorage:', e);
+      } else if (err.code === 'auth/unauthorized-domain') {
+        setError(
+          `Domain "${window.location.hostname}" is not authorized. Please add it to Firebase Console > Authentication > Settings > Authorized Domains.`
+        );
+      } else {
+        setError('Unable to sign in as guest. Please try Google Sign-In.');
       }
-
-      setUser(guestUser);
-      setUserProfile(guestProfile);
       setLoading(false);
     }
   };
@@ -257,22 +270,73 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Send Phone OTP
+  // Helper to map Phone Authentication errors with clear Firebase Console instructions
+  const mapPhoneAuthError = (err: any, maskedPhone: string) => {
+    const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'unknown';
+    console.error('[RoutineFlow Auth] Phone OTP Diagnostic:', {
+      maskedPhone,
+      hostname: currentHost,
+      projectId: firebaseConfig.projectId,
+      errorCode: err?.code,
+      errorMessage: err?.message,
+    });
+
+    if (err?.code === 'auth/operation-not-allowed') {
+      setError(
+        'Phone authentication is disabled in your Firebase project. Please enable "Phone" under Authentication > Sign-in method in the Firebase Console.'
+      );
+    } else if (err?.code === 'auth/unauthorized-domain') {
+      setError(
+        `Phone authentication is not authorized for domain "${currentHost}". Please add "${currentHost}" in Firebase Console > Authentication > Settings > Authorized Domains.`
+      );
+    } else if (err?.code === 'auth/quota-exceeded') {
+      setError(
+        'SMS quota exceeded for this project or billing limit reached. Please verify SMS limits & Cloud Billing in the Firebase Console.'
+      );
+    } else if (err?.code === 'auth/too-many-requests') {
+      setError('Too many SMS requests sent to this number. Please wait a while before requesting again.');
+    } else if (err?.code === 'auth/invalid-phone-number') {
+      setError('Invalid phone number format. Please enter a valid 10-digit mobile number with country code.');
+    } else if (err?.code === 'auth/missing-phone-number') {
+      setError('Please enter a valid phone number.');
+    } else if (err?.code === 'auth/captcha-check-failed') {
+      setError('reCAPTCHA security verification failed. Please refresh the page and try again.');
+    } else if (err?.code === 'auth/invalid-app-credential') {
+      setError(
+        'Firebase app verification failed. Please ensure the domain is added to Firebase Authorized Domains.'
+      );
+    } else if (err?.code === 'auth/network-request-failed') {
+      setError('Network connection error. Please check your internet connection.');
+    } else {
+      setError(
+        `Failed to send verification SMS (${err?.code || 'error'}): ${err?.message || 'Please verify Firebase configuration.'}`
+      );
+    }
+  };
+
+  // Send Phone OTP via Real Firebase Phone Authentication
   const sendPhoneOtp = async (phoneNumber: string, appVerifierContainerId: string): Promise<boolean> => {
+    // Mask phone number for safe dev logging (e.g. +91 98****3210)
+    const maskedPhone = phoneNumber.length > 6
+      ? `${phoneNumber.substring(0, 5)}****${phoneNumber.substring(phoneNumber.length - 2)}`
+      : '***';
+
     try {
       setError(null);
       cleanupRecaptcha();
 
-      // Ensure container exists
+      console.log('[RoutineFlow Auth] Starting real Firebase Phone verification for:', maskedPhone);
+
+      // Verify DOM container exists
       const container = document.getElementById(appVerifierContainerId);
       if (!container) {
-        throw new Error('reCAPTCHA container not found in DOM.');
+        throw new Error(`reCAPTCHA container (#${appVerifierContainerId}) not found in document.`);
       }
 
       window.recaptchaVerifier = new RecaptchaVerifier(auth, appVerifierContainerId, {
         size: 'invisible',
         callback: () => {
-          // reCAPTCHA solved
+          console.log('[RoutineFlow Auth] reCAPTCHA verified successfully');
         },
         'expired-callback': () => {
           setError('Security verification expired. Please request a new code.');
@@ -281,36 +345,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const confirmation = await signInWithPhoneNumber(auth, phoneNumber, window.recaptchaVerifier);
       window.confirmationResult = confirmation;
-      setIsDemoPhoneActive(false);
-      setDemoPhoneNumber(null);
+      confirmationResultRef.current = confirmation;
+      console.log('[RoutineFlow Auth] Real Firebase SMS confirmation result received successfully');
       return true;
     } catch (err: any) {
-      console.warn('Phone OTP notice:', err);
       cleanupRecaptcha();
-
-      if (err.code === 'auth/operation-not-allowed' || err.code === 'auth/billing-not-enabled' || err.message?.includes('billing')) {
-        // Phone SMS is not enabled in Firebase Console; seamlessly enable test OTP flow
-        setIsDemoPhoneActive(true);
-        setDemoPhoneNumber(phoneNumber);
-        setError(null);
-        return true;
-      } else if (err.code === 'auth/invalid-phone-number') {
-        setError('Please enter a valid phone number including country code (e.g. +91 98765 43210).');
-      } else if (err.code === 'auth/too-many-requests') {
-        setError('Too many attempts. Please wait a few moments and try again.');
-      } else if (err.code === 'auth/quota-exceeded') {
-        setError('SMS quota exceeded for this number. Please try Google Sign-In.');
-      } else if (err.code === 'auth/captcha-check-failed') {
-        setError('reCAPTCHA check failed. Please refresh and try again.');
-      } else if (err.code === 'auth/network-request-failed') {
-        setError('Network error. Please check your internet connection.');
-      } else {
-        // For any other SMS provider hurdle, provide test phone verification code seamlessly
-        setIsDemoPhoneActive(true);
-        setDemoPhoneNumber(phoneNumber);
-        setError(null);
-        return true;
-      }
+      confirmationResultRef.current = null;
+      window.confirmationResult = undefined;
+      mapPhoneAuthError(err, maskedPhone);
       return false;
     }
   };
@@ -320,77 +362,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return sendPhoneOtp(phoneNumber, appVerifierContainerId);
   };
 
-  // Verify Phone OTP
+  // Verify Phone OTP via Real Firebase ConfirmationResult
   const verifyPhoneOtp = async (otp: string): Promise<boolean> => {
+    const confirmation = confirmationResultRef.current || window.confirmationResult;
+    if (!confirmation) {
+      setError('Verification session expired. Please request a new OTP code.');
+      return false;
+    }
+
     try {
       setError(null);
-
-      // Handle demo phone verification fallback
-      if (isDemoPhoneActive || !window.confirmationResult) {
-        setLoading(true);
-        const cleanDigits = (demoPhoneNumber || '9876543210').replace(/\D/g, '');
-        const phoneUid = 'phone_' + cleanDigits;
-        const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-
-        // Try anonymous sign in if possible
-        try {
-          await signInAnonymously(auth);
-        } catch (anonErr) {
-          console.warn('Anonymous auth fallback skipped:', anonErr);
-        }
-
-        const phoneUser = {
-          uid: phoneUid,
-          displayName: demoPhoneNumber || 'Phone User',
-          phoneNumber: demoPhoneNumber,
-          email: null,
-          photoURL: null,
-        } as unknown as FirebaseUser;
-
-        const phoneProfile: UserProfile = {
-          uid: phoneUid,
-          displayName: demoPhoneNumber || 'Phone User',
-          phoneNumber: demoPhoneNumber,
-          email: null,
-          photoURL: null,
-          createdAt: new Date().toISOString(),
-          timezone: detectedTz,
-          theme: 'system',
-          weekStartsOn: 'monday',
-          onboardingCompleted: false,
-          selectedGoals: ['Productivity', 'Health'],
-          notificationsEnabled: false,
-        };
-
-        try {
-          localStorage.setItem(
-            'routineflow_demo_session',
-            JSON.stringify({ user: phoneUser, profile: phoneProfile })
-          );
-        } catch (e) {
-          console.warn('Could not persist session:', e);
-        }
-
-        setUser(phoneUser);
-        setUserProfile(phoneProfile);
-        setLoading(false);
-        cleanupRecaptcha();
-        return true;
-      }
-
       setLoading(true);
-      await window.confirmationResult.confirm(otp);
+      console.log('[RoutineFlow Auth] Confirming OTP with Firebase...');
+
+      const result = await confirmation.confirm(otp);
+      console.log('[RoutineFlow Auth] Real Phone OTP verified successfully for UID:', result.user?.uid);
       cleanupRecaptcha();
+      confirmationResultRef.current = null;
+      window.confirmationResult = undefined;
       return true;
     } catch (err: any) {
-      console.error('OTP confirmation error:', err);
+      console.error('[RoutineFlow Auth] OTP confirmation error:', err);
       setLoading(false);
       if (err.code === 'auth/invalid-verification-code') {
-        setError('Incorrect verification code. Please check the 6 digits and try again.');
+        setError('Incorrect or expired OTP. Please try again.');
       } else if (err.code === 'auth/code-expired') {
-        setError('This verification code has expired. Please request a new code.');
+        setError('This OTP code has expired. Please click Resend OTP to request a new code.');
+      } else if (err.code === 'auth/session-expired') {
+        setError('Verification session expired. Please enter your number and request a new code.');
       } else if (err.code === 'auth/network-request-failed') {
-        setError('Network error during verification. Please check your connection.');
+        setError('Network connection error. Please check your connection.');
       } else {
         setError('Verification failed. Please check the code and try again.');
       }
@@ -401,13 +402,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Sign out
   const signOut = async () => {
     try {
-      try {
-        localStorage.removeItem('routineflow_demo_session');
-      } catch (e) {
-        // ignore
-      }
-      setIsDemoPhoneActive(false);
-      setDemoPhoneNumber(null);
+      cleanupRecaptcha();
+      confirmationResultRef.current = null;
+      window.confirmationResult = undefined;
       await fbSignOut(auth);
       setUser(null);
       setUserProfile(null);

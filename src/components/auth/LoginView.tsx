@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { Phone, ArrowRight, ArrowLeft, CheckCircle, ShieldCheck, Sparkles, Check, RefreshCw, ChevronDown } from 'lucide-react';
+import { Phone, ArrowRight, ArrowLeft, CheckCircle, ShieldCheck, Check, RefreshCw, ChevronDown, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface CountryOption {
@@ -36,7 +36,6 @@ export const LoginView: React.FC = () => {
     sendPhoneOtp,
     verifyPhoneOtp,
     resendPhoneOtp,
-    isDemoPhoneActive,
     error,
     clearError,
   } = useAuth();
@@ -48,6 +47,7 @@ export const LoginView: React.FC = () => {
   const [otp, setOtp] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   
   // Resend OTP countdown
   const [resendCountdown, setResendCountdown] = useState<number>(0);
@@ -84,19 +84,47 @@ export const LoginView: React.FC = () => {
     }
   }, [authMode]);
 
+  // Sanitize national number to remove duplicate dialCode or leading zeroes
+  const getSanitizedNationalDigits = (): string => {
+    let digits = phoneNationalNumber.replace(/\D/g, '');
+    
+    // If India (+91)
+    if (selectedCountry.code === 'IN') {
+      // Strip leading country code if user typed 91 + 10 digits
+      if (digits.startsWith('91') && digits.length === 12) {
+        digits = digits.substring(2);
+      }
+      // Strip leading zero if user typed 0 + 10 digits
+      if (digits.startsWith('0') && digits.length === 11) {
+        digits = digits.substring(1);
+      }
+    }
+    
+    return digits;
+  };
+
   const getFullE164Number = (): string => {
-    const cleanDigits = phoneNationalNumber.replace(/\D/g, '');
+    const cleanDigits = getSanitizedNationalDigits();
     return `${selectedCountry.dialCode}${cleanDigits}`;
+  };
+
+  const getFormattedDisplayNumber = (): string => {
+    const cleanDigits = getSanitizedNationalDigits();
+    if (selectedCountry.code === 'IN' && cleanDigits.length === 10) {
+      return `+91 ${cleanDigits.substring(0, 5)} ${cleanDigits.substring(5)}`;
+    }
+    return `${selectedCountry.dialCode} ${cleanDigits}`;
   };
 
   const handleGoogleLogin = async () => {
     try {
       clearError();
       setLocalError(null);
+      setSuccessMessage(null);
       setIsSubmitting(true);
       await signInWithGoogle();
     } catch (err: any) {
-      // Error handled by AuthContext
+      // Diagnostic error handled by AuthContext
     } finally {
       setIsSubmitting(false);
     }
@@ -106,6 +134,7 @@ export const LoginView: React.FC = () => {
     try {
       clearError();
       setLocalError(null);
+      setSuccessMessage(null);
       setIsSubmitting(true);
       await signInAsGuest();
     } catch (err: any) {
@@ -119,21 +148,24 @@ export const LoginView: React.FC = () => {
     e.preventDefault();
     clearError();
     setLocalError(null);
+    setSuccessMessage(null);
 
-    const cleanDigits = phoneNationalNumber.replace(/\D/g, '');
+    const cleanDigits = getSanitizedNationalDigits();
     if (!cleanDigits) {
       setLocalError('Please enter your mobile phone number.');
       return;
     }
 
-    if (selectedCountry.code === 'IN' && cleanDigits.length !== 10) {
-      setLocalError('Please enter a valid 10-digit Indian mobile number.');
-      return;
-    }
-
-    if (cleanDigits.length < selectedCountry.digits - 1) {
-      setLocalError(`Please enter a valid ${selectedCountry.name} phone number.`);
-      return;
+    if (selectedCountry.code === 'IN') {
+      if (cleanDigits.length !== 10) {
+        setLocalError('Please enter a valid 10-digit Indian mobile number.');
+        return;
+      }
+    } else {
+      if (cleanDigits.length < selectedCountry.digits - 1) {
+        setLocalError(`Please enter a valid ${selectedCountry.name} mobile phone number.`);
+        return;
+      }
     }
 
     const fullPhoneNumber = getFullE164Number();
@@ -142,10 +174,11 @@ export const LoginView: React.FC = () => {
       setIsSubmitting(true);
       const sent = await sendPhoneOtp(fullPhoneNumber, 'recaptcha-container');
       if (sent) {
+        setSuccessMessage(`OTP sent successfully to ${getFormattedDisplayNumber()}`);
         setAuthMode('phone_otp');
       }
     } catch (err) {
-      // Handled in AuthContext
+      // Error is set in AuthContext
     } finally {
       setIsSubmitting(false);
     }
@@ -155,12 +188,14 @@ export const LoginView: React.FC = () => {
     if (resendCountdown > 0 || isSubmitting) return;
     clearError();
     setLocalError(null);
+    setSuccessMessage(null);
     const fullPhoneNumber = getFullE164Number();
 
     try {
       setIsSubmitting(true);
       const sent = await resendPhoneOtp(fullPhoneNumber, 'recaptcha-container');
       if (sent) {
+        setSuccessMessage(`New verification code sent to ${getFormattedDisplayNumber()}`);
         setResendCountdown(30);
         setOtp('');
       }
@@ -175,7 +210,7 @@ export const LoginView: React.FC = () => {
     e.preventDefault();
     const cleanOtp = otp.trim().replace(/\D/g, '');
     if (cleanOtp.length !== 6) {
-      setLocalError('Please enter the 6-digit verification code.');
+      setLocalError('Please enter the complete 6-digit verification code.');
       return;
     }
 
@@ -206,12 +241,25 @@ export const LoginView: React.FC = () => {
           RoutineFlow
         </h2>
         <p className="mt-1.5 text-center text-xs font-mono uppercase tracking-widest text-[#78716C] dark:text-[#A39E96]">
-          Daily Journal & Habit Ledger
+          Daily Habit & Schedule System
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white dark:bg-[#1A1918] py-8 px-6 sm:px-10 border border-[#E8E3DA] dark:border-[#282725] rounded-2xl shadow-xs">
+          
+          {/* Success Notice */}
+          {successMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-4 p-3 bg-[#F2F8F4] dark:bg-[#182C20] border border-[#CDE5D7] dark:border-[#244833] rounded-xl text-xs text-[#2D5A43] dark:text-[#88D4A8] font-medium flex items-center gap-2"
+            >
+              <Check className="w-4 h-4 shrink-0" />
+              <span>{successMessage}</span>
+            </motion.div>
+          )}
+
           {/* Error display */}
           {(error || localError) && (
             <motion.div
@@ -220,14 +268,18 @@ export const LoginView: React.FC = () => {
               className="mb-5 p-3.5 bg-[#FBEBEB] dark:bg-[#351C1C] border border-[#F5C2C2] dark:border-[#5E2B2B] rounded-xl text-xs text-[#991B1B] dark:text-[#FCA5A5] font-medium leading-relaxed"
             >
               <div className="flex flex-col gap-2.5">
-                <span>{error || localError}</span>
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span className="flex-1">{error || localError}</span>
+                </div>
+                
                 <div className="flex flex-wrap items-center gap-2 pt-1.5 border-t border-[#F5C2C2]/40 dark:border-[#5E2B2B]/40">
                   <button
                     type="button"
                     onClick={handleGoogleLogin}
                     className="px-2.5 py-1 bg-[#1A1A1A] text-white dark:bg-[#F3EFEA] dark:text-[#121212] rounded-lg text-[11px] font-semibold cursor-pointer hover:opacity-90 transition-opacity"
                   >
-                    Google Sign-In
+                    Try Google Sign-In
                   </button>
                   <button
                     type="button"
@@ -236,7 +288,7 @@ export const LoginView: React.FC = () => {
                   >
                     Guest Demo Access
                   </button>
-                  {(error?.includes('Popup') || localError?.includes('Popup')) && (
+                  {(error?.includes('Popup') || error?.includes('blocked') || error?.includes('domain') || localError?.includes('Popup')) && (
                     <a
                       href={window.location.href}
                       target="_blank"
@@ -286,7 +338,7 @@ export const LoginView: React.FC = () => {
                       d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
                     />
                   </svg>
-                  <span>Continue with Google</span>
+                  <span>{isSubmitting ? 'Signing in...' : 'Continue with Google'}</span>
                 </button>
 
                 {/* Continue with Phone */}
@@ -296,6 +348,7 @@ export const LoginView: React.FC = () => {
                   onClick={() => {
                     clearError();
                     setLocalError(null);
+                    setSuccessMessage(null);
                     setAuthMode('phone_input');
                   }}
                   className="w-full flex items-center justify-center gap-2.5 px-4 py-3 bg-[#1A1A1A] hover:bg-[#33312E] text-[#FAF8F5] dark:bg-[#F3EFEA] dark:text-[#121212] dark:hover:bg-[#E2DDD5] font-medium text-xs sm:text-sm rounded-xl active:scale-[0.99] transition-all cursor-pointer"
@@ -312,7 +365,7 @@ export const LoginView: React.FC = () => {
                   disabled={isSubmitting}
                   className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-transparent hover:bg-[#FAF8F5] dark:hover:bg-[#201F1E] text-[#57534E] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] border border-dashed border-[#D6D0C4] dark:border-[#383634] font-medium text-xs rounded-xl transition-all disabled:opacity-50 cursor-pointer"
                 >
-                  <span>Continue as Guest (Instant Demo)</span>
+                  <span>Continue as Guest</span>
                 </button>
 
                 {/* Feature highlight list */}
@@ -348,6 +401,7 @@ export const LoginView: React.FC = () => {
                     onClick={() => {
                       clearError();
                       setLocalError(null);
+                      setSuccessMessage(null);
                       setAuthMode('main');
                     }}
                     className="flex items-center gap-1 text-xs font-mono text-[#78716C] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] cursor-pointer"
@@ -432,7 +486,7 @@ export const LoginView: React.FC = () => {
 
                   <p className="mt-1.5 text-[11px] font-mono text-[#78716C] dark:text-[#A39E96]">
                     {selectedCountry.code === 'IN'
-                      ? 'Defaulted to 🇮🇳 India (+91). Enter your 10-digit number.'
+                      ? 'Defaulted to 🇮🇳 India (+91). Enter your 10-digit mobile number.'
                       : `Selected: ${selectedCountry.flag} ${selectedCountry.name} (${selectedCountry.dialCode})`}
                   </p>
                 </div>
@@ -450,7 +504,7 @@ export const LoginView: React.FC = () => {
                     </>
                   ) : (
                     <>
-                      <span>Send OTP Code</span>
+                      <span>Send OTP</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </>
                   )}
@@ -473,6 +527,7 @@ export const LoginView: React.FC = () => {
                     onClick={() => {
                       clearError();
                       setLocalError(null);
+                      setSuccessMessage(null);
                       setAuthMode('phone_input');
                     }}
                     className="flex items-center gap-1 text-xs font-mono text-[#78716C] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] cursor-pointer"
@@ -493,25 +548,7 @@ export const LoginView: React.FC = () => {
                     >
                       Enter 6-Digit Verification Code
                     </label>
-                    {isDemoPhoneActive && (
-                      <button
-                        type="button"
-                        onClick={() => setOtp('123456')}
-                        className="text-[11px] font-mono text-[#2D5A43] dark:text-[#68B087] font-semibold underline cursor-pointer"
-                      >
-                        Autofill Test Code (123456)
-                      </button>
-                    )}
                   </div>
-
-                  {isDemoPhoneActive && (
-                    <div className="mb-2.5 p-2.5 bg-[#F2F8F4] dark:bg-[#1A2E22] border border-[#CDE5D7] dark:border-[#2C4D3A] rounded-lg text-[11px] text-[#2D5A43] dark:text-[#A7D7BC] leading-relaxed flex items-center gap-2">
-                      <Check className="w-3.5 h-3.5 shrink-0" />
-                      <span>
-                        Firebase SMS is disabled in project console. Use test code <strong>123456</strong> to proceed!
-                      </span>
-                    </div>
-                  )}
 
                   <input
                     id="otp-input"
@@ -532,7 +569,7 @@ export const LoginView: React.FC = () => {
                   />
                   <div className="mt-2 flex items-center justify-between text-[11px] font-mono text-[#78716C] dark:text-[#A39E96]">
                     <span>
-                      Sent to <span className="font-semibold text-[#1A1A1A] dark:text-[#F3EFEA]">{getFullE164Number()}</span>
+                      Sent to <span className="font-semibold text-[#1A1A1A] dark:text-[#F3EFEA]">{getFormattedDisplayNumber()}</span>
                     </span>
                     <button
                       type="button"
@@ -545,7 +582,7 @@ export const LoginView: React.FC = () => {
                           : 'text-[#1A1A1A] dark:text-[#F3EFEA] font-semibold'
                       }`}
                     >
-                      {resendCountdown > 0 ? `Resend in ${resendCountdown}s` : 'Resend OTP'}
+                      {resendCountdown > 0 ? `Resend OTP in ${resendCountdown}s` : 'Resend OTP'}
                     </button>
                   </div>
                 </div>
@@ -585,3 +622,4 @@ export const LoginView: React.FC = () => {
     </div>
   );
 };
+
