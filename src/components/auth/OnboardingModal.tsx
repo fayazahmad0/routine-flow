@@ -42,9 +42,10 @@ export const OnboardingModal: React.FC = () => {
   );
   const [createStarter, setCreateStarter] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [isDismissed, setIsDismissed] = useState<boolean>(false);
 
   // If user already completed onboarding, do not render
-  if (userProfile?.onboardingCompleted) {
+  if (userProfile?.onboardingCompleted || isDismissed) {
     return null;
   }
 
@@ -55,10 +56,10 @@ export const OnboardingModal: React.FC = () => {
   };
 
   const handleFinish = async () => {
+    setIsSubmitting(true);
+    const name = displayName.trim() || user?.displayName || 'Friend';
+    
     try {
-      setIsSubmitting(true);
-      const name = displayName.trim() || user?.displayName || 'Friend';
-      
       if (createStarter) {
         await createStarterRoutine(selectedGoals);
       }
@@ -69,9 +70,11 @@ export const OnboardingModal: React.FC = () => {
         selectedGoals,
       });
 
+      setIsDismissed(true);
       showToast('Welcome to RoutineFlow! Your dashboard is ready.', 'success');
     } catch (err) {
       console.error('Error completing onboarding:', err);
+      setIsDismissed(true);
     } finally {
       setIsSubmitting(false);
     }

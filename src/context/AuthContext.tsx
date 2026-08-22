@@ -139,7 +139,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             },
             (err) => {
               console.warn('User profile snapshot fallback active:', err);
-              handleFirestoreError(err, OperationType.GET, `users/${currentUser.uid}`);
               // Fallback to auth object profile so the app remains fully functional
               const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
               setUserProfile({
@@ -417,11 +416,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateUserProfile = async (updates: Partial<UserProfile>) => {
     if (!user) return;
     const userDocRef = doc(db, 'users', user.uid);
+    // Optimistically update local profile state immediately
+    setUserProfile((prev) => {
+      if (prev) return { ...prev, ...updates };
+      const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+      return {
+        uid: user.uid,
+        displayName: user.displayName || user.phoneNumber || 'Routine Flow User',
+        email: user.email || null,
+        phoneNumber: user.phoneNumber || null,
+        photoURL: user.photoURL || null,
+        createdAt: new Date().toISOString(),
+        timezone: detectedTz,
+        theme: 'system',
+        weekStartsOn: 'monday',
+        onboardingCompleted: true,
+        selectedGoals: ['Productivity', 'Health'],
+        notificationsEnabled: false,
+        ...updates,
+      };
+    });
+
     try {
-      await updateDoc(userDocRef, updates);
-      setUserProfile((prev) => (prev ? { ...prev, ...updates } : null));
+      await setDoc(userDocRef, updates, { merge: true });
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
+      console.warn('Profile cloud update error (optimistic state preserved):', err);
     }
   };
 

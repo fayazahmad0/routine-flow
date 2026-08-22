@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { Phone, ArrowRight, ArrowLeft, CheckCircle, ShieldCheck, Check, RefreshCw, ChevronDown, AlertCircle } from 'lucide-react';
+import { Phone, ArrowRight, ArrowLeft, CheckCircle, ShieldCheck, Check, RefreshCw, ChevronDown, AlertCircle, Copy, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface CountryOption {
@@ -47,6 +47,7 @@ export const LoginView: React.FC = () => {
   const [otp, setOtp] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [copiedDomain, setCopiedDomain] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   
   // Resend OTP countdown
@@ -226,6 +227,16 @@ export const LoginView: React.FC = () => {
     }
   };
 
+  const currentHostname = typeof window !== 'undefined' ? window.location.hostname : '';
+
+  const handleCopyDomain = () => {
+    if (currentHostname) {
+      navigator.clipboard.writeText(currentHostname);
+      setCopiedDomain(true);
+      setTimeout(() => setCopiedDomain(false), 2500);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F9F8F6] dark:bg-[#121212] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 transition-colors">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
@@ -270,8 +281,27 @@ export const LoginView: React.FC = () => {
               <div className="flex flex-col gap-2.5">
                 <div className="flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span className="flex-1">{error || localError}</span>
+                  <span className="flex-1 leading-normal">{error || localError}</span>
                 </div>
+
+                {(error?.includes('authorized for domain') || error?.includes('unauthorized-domain')) && (
+                  <div className="p-2.5 bg-white/70 dark:bg-[#201010] border border-[#F5C2C2] dark:border-[#5E2B2B] rounded-lg text-[11px] text-[#7F1D1D] dark:text-[#FECACA] flex flex-col gap-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono truncate select-all">{currentHostname}</span>
+                      <button
+                        type="button"
+                        onClick={handleCopyDomain}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#991B1B] text-white dark:bg-[#FECACA] dark:text-[#7F1D1D] rounded font-semibold text-[10px] hover:opacity-90 transition-opacity cursor-pointer shrink-0"
+                      >
+                        {copiedDomain ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                        <span>{copiedDomain ? 'Copied!' : 'Copy Domain'}</span>
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-[#991B1B]/80 dark:text-[#FECACA]/80">
+                      Add to: <strong>Firebase Console</strong> → <strong>Authentication</strong> → <strong>Settings</strong> → <strong>Authorized domains</strong>.
+                    </p>
+                  </div>
+                )}
                 
                 <div className="flex flex-wrap items-center gap-2 pt-1.5 border-t border-[#F5C2C2]/40 dark:border-[#5E2B2B]/40">
                   <button
@@ -279,7 +309,7 @@ export const LoginView: React.FC = () => {
                     onClick={handleGoogleLogin}
                     className="px-2.5 py-1 bg-[#1A1A1A] text-white dark:bg-[#F3EFEA] dark:text-[#121212] rounded-lg text-[11px] font-semibold cursor-pointer hover:opacity-90 transition-opacity"
                   >
-                    Try Google Sign-In
+                    Retry Google Sign-In
                   </button>
                   <button
                     type="button"
@@ -293,9 +323,10 @@ export const LoginView: React.FC = () => {
                       href={window.location.href}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-2.5 py-1 bg-white dark:bg-[#201F1E] text-[#1A1A1A] dark:text-[#F3EFEA] border border-[#E8E3DA] dark:border-[#383634] rounded-lg text-[11px] font-semibold cursor-pointer hover:bg-[#FAF8F5] transition-colors"
+                      className="px-2.5 py-1 bg-white dark:bg-[#201F1E] text-[#1A1A1A] dark:text-[#F3EFEA] border border-[#E8E3DA] dark:border-[#383634] rounded-lg text-[11px] font-semibold cursor-pointer hover:bg-[#FAF8F5] transition-colors inline-flex items-center gap-1"
                     >
-                      Open in New Tab ↗
+                      <span>Open in New Tab</span>
+                      <ExternalLink className="w-3 h-3" />
                     </a>
                   )}
                 </div>

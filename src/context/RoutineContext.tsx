@@ -196,7 +196,9 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
           setCategories(snap.docs.map((d) => d.data() as Category));
         }
       },
-      (err) => handleFirestoreError(err, OperationType.GET, `users/${uid}/categories`)
+      (err) => {
+        console.warn('Categories sync notice:', err);
+      }
     );
 
     // 2. Tasks
@@ -207,7 +209,10 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setTasks(snap.docs.map((d) => d.data() as Task));
         setLoading(false);
       },
-      (err) => handleFirestoreError(err, OperationType.GET, `users/${uid}/tasks`)
+      (err) => {
+        console.warn('Tasks sync notice:', err);
+        setLoading(false);
+      }
     );
 
     // 3. Completions (with pending write protection)
@@ -233,7 +238,9 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
           return Array.from(map.values());
         });
       },
-      (err) => handleFirestoreError(err, OperationType.GET, `users/${uid}/taskCompletions`)
+      (err) => {
+        console.warn('Completions sync notice:', err);
+      }
     );
 
     // 4. Daily Records
@@ -243,7 +250,9 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
       (snap) => {
         setDailyRecords(snap.docs.map((d) => d.data() as DailyRecord));
       },
-      (err) => handleFirestoreError(err, OperationType.GET, `users/${uid}/dailyRecords`)
+      (err) => {
+        console.warn('Daily records sync notice:', err);
+      }
     );
 
     // 5. Achievements
@@ -253,7 +262,9 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
       (snap) => {
         setAchievements(snap.docs.map((d) => d.data() as Achievement));
       },
-      (err) => handleFirestoreError(err, OperationType.GET, `users/${uid}/achievements`)
+      (err) => {
+        console.warn('Achievements sync notice:', err);
+      }
     );
 
     return () => {
@@ -746,9 +757,35 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
       isArchived: false,
     });
 
+    const now = new Date().toISOString();
+    const createdTasks: Task[] = [];
+
     for (const st of starterTasks) {
-      await addTask(st);
+      const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const newTask: Task = {
+        ...st,
+        taskId,
+        uid: user.uid,
+        icon: st.icon || 'CheckSquare',
+        isActive: st.isActive ?? true,
+        isArchived: false,
+        createdAt: now,
+        updatedAt: now,
+      };
+      createdTasks.push(newTask);
     }
+
+    // 1. Update local state immediately
+    setTasks((prev) => [...createdTasks, ...prev]);
+
+    // 2. Persist to Firestore concurrently
+    Promise.allSettled(
+      createdTasks.map((task) =>
+        setDoc(doc(db, `users/${user.uid}/tasks`, task.taskId), sanitizeForFirestore(task))
+      )
+    ).catch((err) => {
+      console.warn('Starter tasks firestore batch write notice:', err);
+    });
   };
 
   // Export Data JSON

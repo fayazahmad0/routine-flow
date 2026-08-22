@@ -1,12 +1,12 @@
 {
-  "projectId": "star-music-42f42",
-  "appId": "1:293562429203:web:d084e59b9f280af026b4e6",
-  "apiKey": "AIzaSyBQnM2qr2EwmAapz_RJzIGPM74sneCb7mU",
-  "authDomain": "star-music-42f42.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-routineflow-2de3a827-897e-4a23-9df1-42eecc4820a0",
-  "storageBucket": "star-music-42f42.firebasestorage.app",
-  "messagingSenderId": "293562429203",
+  "projectId": "routineflow-42a5e",
+  "appId": "1:724187178194:web:b4e264b2f55ea73233f90b",
+  "apiKey": "AIzaSyDtvuQ_1q2Wi75VWE_Z7E4SyhLwYyPxRyY",
+  "authDomain": "routineflow-42a5e.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "routineflow-42a5e.firebasestorage.app",
+  "messagingSenderId": "724187178194",
   "measurementId": "",
-  "oAuthClientId": "293562429203-rqa023d1ja32aachuh8sha3np0lejgmp.apps.googleusercontent.com",
+  "oAuthClientId": "",
   "recaptchaSiteKey": ""
 }

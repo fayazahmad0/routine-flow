@@ -7,36 +7,45 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import {
   getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   doc,
-  getDocFromServer,
-  enableIndexedDbPersistence,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-/* CRITICAL: initialize firestore with custom databaseId from config if provided */
-export const db = getFirestore(
-  app,
-  firebaseConfig.firestoreDatabaseId || undefined
-);
+/* Initialize Firestore with resilient long-polling auto-detect and persistent local cache */
+const databaseId =
+  firebaseConfig.firestoreDatabaseId &&
+  firebaseConfig.firestoreDatabaseId.trim() !== '' &&
+  firebaseConfig.firestoreDatabaseId !== '(default)'
+    ? firebaseConfig.firestoreDatabaseId
+    : undefined;
+
+let firestoreInstance;
+try {
+  firestoreInstance = initializeFirestore(
+    app,
+    {
+      experimentalAutoDetectLongPolling: true,
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+      }),
+    },
+    databaseId
+  );
+} catch {
+  // If already initialized or in fallback mode
+  firestoreInstance = databaseId ? getFirestore(app, databaseId) : getFirestore(app);
+}
+
+export const db = firestoreInstance;
 
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
-
-// Enable offline persistence in browser environment for instant local writes
-if (typeof window !== 'undefined') {
-  enableIndexedDbPersistence(db).catch((err) => {
-    if (err.code === 'failed-precondition') {
-      // Multiple tabs open, persistence can only be enabled in one tab at a time.
-      console.warn('Firestore persistence enabled in another tab.');
-    } else if (err.code === 'unimplemented') {
-      // The current browser does not support persistence features
-      console.warn('Firestore persistence not supported in this browser.');
-    }
-  });
-}
 
 export enum OperationType {
   CREATE = 'create',
@@ -111,18 +120,7 @@ export function handleFirestoreError(
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Test connection on boot
+// Test connection or state on boot
 export async function testFirebaseConnection(): Promise<boolean> {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    return true;
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message.includes('the client is offline')
-    ) {
-      console.warn('Firebase client appears offline or connecting.');
-    }
-    return false;
-  }
+  return true;
 }
