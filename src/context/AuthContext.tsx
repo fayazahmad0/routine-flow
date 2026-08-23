@@ -100,67 +100,82 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     let unsubscribeProfile: (() => void) | undefined;
 
-    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
+    // Fallback safety timer in case Firebase auth takes unusually long to determine state
+    const authTimeout = setTimeout(() => {
+      setLoading((prevLoading) => {
+        if (prevLoading) {
+          console.warn('[RoutineFlow Auth] Auth state resolution reached timeout fallback; unblocking UI shell.');
+          const current = auth.currentUser;
+          if (current) {
+            setUser(current);
+            setUserProfile((prev) => prev || {
+              uid: current.uid,
+              displayName: current.displayName || current.phoneNumber || 'Routine Flow User',
+              email: current.email || null,
+              phoneNumber: current.phoneNumber || null,
+              photoURL: current.photoURL || null,
+              createdAt: new Date().toISOString(),
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+              theme: 'system',
+              weekStartsOn: 'monday',
+              onboardingCompleted: false,
+              selectedGoals: ['Productivity', 'Health'],
+              notificationsEnabled: false,
+            });
+          }
+          return false;
+        }
+        return false;
+      });
+    }, 1800);
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+      clearTimeout(authTimeout);
       setUser(currentUser);
+
       if (currentUser) {
-        // Listen to or create user profile doc
+        // Construct instant optimistic user profile from auth token so UI renders at 0ms
+        const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+        const instantProfile: UserProfile = {
+          uid: currentUser.uid,
+          displayName: currentUser.displayName || currentUser.phoneNumber || 'Routine Flow User',
+          email: currentUser.email || null,
+          phoneNumber: currentUser.phoneNumber || null,
+          photoURL: currentUser.photoURL || null,
+          createdAt: new Date().toISOString(),
+          timezone: detectedTz,
+          theme: 'system',
+          weekStartsOn: 'monday',
+          onboardingCompleted: false,
+          selectedGoals: ['Productivity', 'Health'],
+          notificationsEnabled: false,
+        };
+
+        setUserProfile((prev) => prev || instantProfile);
+        // CRITICAL: Unblock UI shell immediately without waiting for Firestore network trip
+        setLoading(false);
+
+        // Progressively synchronize user profile document from Firestore in the background
         const userDocRef = doc(db, 'users', currentUser.uid);
         try {
           unsubscribeProfile = onSnapshot(
             userDocRef,
-            async (snapshot) => {
+            (snapshot) => {
               if (snapshot.exists()) {
                 setUserProfile(snapshot.data() as UserProfile);
               } else {
-                // Initialize default profile
-                const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-                const newProfile: UserProfile = {
-                  uid: currentUser.uid,
-                  displayName: currentUser.displayName || currentUser.phoneNumber || 'Routine Flow User',
-                  email: currentUser.email || null,
-                  phoneNumber: currentUser.phoneNumber || null,
-                  photoURL: currentUser.photoURL || null,
-                  createdAt: new Date().toISOString(),
-                  timezone: detectedTz,
-                  theme: 'system',
-                  weekStartsOn: 'monday',
-                  onboardingCompleted: false,
-                  selectedGoals: ['Productivity', 'Health'],
-                  notificationsEnabled: false,
-                };
-                try {
-                  await setDoc(userDocRef, newProfile);
-                } catch (writeErr) {
+                // Initialize default profile document asynchronously in background
+                setDoc(userDocRef, instantProfile).catch((writeErr) => {
                   console.warn('Initial profile doc creation pending/deferred:', writeErr);
-                }
-                setUserProfile(newProfile);
+                });
               }
-              setLoading(false);
             },
             (err) => {
               console.warn('User profile snapshot fallback active:', err);
-              // Fallback to auth object profile so the app remains fully functional
-              const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-              setUserProfile({
-                uid: currentUser.uid,
-                displayName: currentUser.displayName || currentUser.phoneNumber || 'Routine Flow User',
-                email: currentUser.email || null,
-                phoneNumber: currentUser.phoneNumber || null,
-                photoURL: currentUser.photoURL || null,
-                createdAt: new Date().toISOString(),
-                timezone: detectedTz,
-                theme: 'system',
-                weekStartsOn: 'monday',
-                onboardingCompleted: false,
-                selectedGoals: ['Productivity', 'Health'],
-                notificationsEnabled: false,
-              });
-              setLoading(false);
             }
           );
         } catch (err) {
-          console.error('Profile sync error:', err);
-          setLoading(false);
+          console.warn('Profile listener initialization notice:', err);
         }
       } else {
         setUserProfile(null);
@@ -169,6 +184,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     return () => {
+      clearTimeout(authTimeout);
       unsubscribeAuth();
       if (unsubscribeProfile) {
         unsubscribeProfile();

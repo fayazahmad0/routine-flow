@@ -60,6 +60,16 @@ const DEFAULT_CATEGORIES: Omit<Category, 'categoryId' | 'uid' | 'createdAt'>[] =
   { name: 'Other', icon: 'CheckSquare', color: '#64748b', isDefault: true },
 ];
 
+const INITIAL_CATEGORIES: Category[] = DEFAULT_CATEGORIES.map((def) => ({
+  categoryId: def.name.toLowerCase().replace(/\s+/g, '_'),
+  uid: '',
+  name: def.name,
+  icon: def.icon,
+  color: def.color,
+  isDefault: true,
+  createdAt: new Date().toISOString(),
+}));
+
 export interface ToastInfo {
   message: { text: string; type?: 'success' | 'info' | 'error' };
   type?: 'success' | 'info' | 'error';
@@ -110,10 +120,10 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [completions, setCompletions] = useState<TaskCompletion[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
   const [dailyRecords, setDailyRecords] = useState<DailyRecord[]>([]);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false);
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [toastMessage, setToastMessage] = useState<{ text: string; type?: 'success' | 'info' | 'error' } | null>(null);
 
@@ -158,7 +168,7 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!user) {
       setTasks([]);
       setCompletions([]);
-      setCategories([]);
+      setCategories(INITIAL_CATEGORIES);
       setDailyRecords([]);
       setAchievements([]);
       setLoading(false);
@@ -166,32 +176,28 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return;
     }
 
-    setLoading(true);
     const uid = user.uid;
 
-    // 1. Categories
+    // 1. Categories (non-blocking snapshot)
     const categoriesRef = collection(db, `users/${uid}/categories`);
     const unsubCategories = onSnapshot(
       categoriesRef,
-      async (snap) => {
+      (snap) => {
         if (snap.empty) {
-          // Seed default categories
-          const seeded: Category[] = [];
-          for (const def of DEFAULT_CATEGORIES) {
-            const catId = def.name.toLowerCase().replace(/\s+/g, '_');
-            const newCat: Category = {
-              categoryId: catId,
-              uid,
-              name: def.name,
-              icon: def.icon,
-              color: def.color,
-              isDefault: true,
-              createdAt: new Date().toISOString(),
-            };
-            await setDoc(doc(db, `users/${uid}/categories`, catId), newCat);
-            seeded.push(newCat);
-          }
+          // Asynchronously seed default categories in background without blocking state
+          const seeded: Category[] = DEFAULT_CATEGORIES.map((def) => ({
+            categoryId: def.name.toLowerCase().replace(/\s+/g, '_'),
+            uid,
+            name: def.name,
+            icon: def.icon,
+            color: def.color,
+            isDefault: true,
+            createdAt: new Date().toISOString(),
+          }));
           setCategories(seeded);
+          Promise.allSettled(
+            seeded.map((cat) => setDoc(doc(db, `users/${uid}/categories`, cat.categoryId), cat))
+          ).catch((err) => console.warn('Categories background seeding notice:', err));
         } else {
           setCategories(snap.docs.map((d) => d.data() as Category));
         }
@@ -436,19 +442,21 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const sanitizedTask = sanitizeForFirestore(newTask);
 
+    // 1. Instant optimistic local state update (0ms perceived latency)
+    setTasks((prev) => {
+      if (prev.some((t) => t.taskId === taskId)) return prev;
+      return [newTask, ...prev];
+    });
+
     try {
       await setDoc(doc(db, `users/${user.uid}/tasks`, taskId), sanitizedTask);
-      
-      // Update local state immediately (with deduping safeguard)
-      setTasks((prev) => {
-        if (prev.some((t) => t.taskId === taskId)) return prev;
-        return [newTask, ...prev];
-      });
-
       showToast(`Task "${newTask.title}" added successfully ✓`, 'success');
       return taskId;
     } catch (err: any) {
       console.error('Firestore addTask write error:', err);
+      // Rollback optimistic task on error
+      setTasks((prev) => prev.filter((t) => t.taskId !== taskId));
+
       let errorMsg = "Couldn't create the task. Please check your connection.";
       if (err?.code === 'permission-denied' || err?.message?.includes('permission')) {
         errorMsg = "Missing or insufficient permissions to create task.";

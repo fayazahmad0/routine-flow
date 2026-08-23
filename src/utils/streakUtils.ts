@@ -81,7 +81,7 @@ export function calculateTaskStreak(
 }
 
 /**
- * Calculates global streaks across all habits with high-speed indexing
+ * Calculates global streaks and individual task streaks with a single-pass indexed scan
  */
 export function calculateOverallStreaks(
   tasks: Task[],
@@ -90,8 +90,18 @@ export function calculateOverallStreaks(
 ): StreakStats {
   const activeTasks = tasks.filter((t) => t.isActive && !t.isArchived);
   
-  // Fast index maps
-  const taskDateCompletionMap = new Map<string, boolean>();
+  if (activeTasks.length === 0) {
+    return {
+      currentStreak: 0,
+      longestStreak: 0,
+      perfectDaysCount: 0,
+      totalCompletions: 0,
+      taskStreaks: {},
+    };
+  }
+
+  // Fast completion set & count
+  const completedTaskDates = new Set<string>();
   const completionsByDate = new Map<string, Set<string>>();
   let totalCompletions = 0;
 
@@ -99,7 +109,7 @@ export function calculateOverallStreaks(
     const c = completions[i];
     if (c.completed) {
       totalCompletions++;
-      taskDateCompletionMap.set(`${c.taskId}_${c.localDate}`, true);
+      completedTaskDates.add(`${c.taskId}_${c.localDate}`);
       let dateSet = completionsByDate.get(c.localDate);
       if (!dateSet) {
         dateSet = new Set();
@@ -109,27 +119,16 @@ export function calculateOverallStreaks(
     }
   }
 
-  // Calculate day-by-day stats
-  const taskStreaks: Record<string, { current: number; longest: number }> = {};
-  for (let i = 0; i < activeTasks.length; i++) {
-    const task = activeTasks[i];
-    taskStreaks[task.taskId] = calculateTaskStreak(task, completions, todayStr, taskDateCompletionMap);
-  }
-
-  // Calculate overall consecutive days with activity
+  // 1. Calculate overall current streak (go back from todayStr)
   let currentStreak = 0;
   let checkDate = todayStr;
 
   const todayCompletedSet = completionsByDate.get(todayStr) || new Set();
-  const todayScheduledTasks = activeTasks.filter((t) =>
-    isTaskScheduledOnDate(t, todayStr)
-  );
-
+  const todayScheduledTasks = activeTasks.filter((t) => isTaskScheduledOnDate(t, todayStr));
   let hasTodayActivity = false;
+
   if (todayScheduledTasks.length > 0) {
-    const todayCompletedCount = todayScheduledTasks.filter((t) =>
-      todayCompletedSet.has(t.taskId)
-    ).length;
+    const todayCompletedCount = todayScheduledTasks.filter((t) => todayCompletedSet.has(t.taskId)).length;
     if (todayCompletedCount > 0) {
       hasTodayActivity = true;
     }
@@ -143,20 +142,16 @@ export function calculateOverallStreaks(
   }
 
   let safety = 0;
-  while (safety < 180) {
+  while (safety < 120) {
     safety++;
-    const scheduled = activeTasks.filter((t) =>
-      isTaskScheduledOnDate(t, checkDate)
-    );
+    const scheduled = activeTasks.filter((t) => isTaskScheduledOnDate(t, checkDate));
     if (scheduled.length === 0) {
       checkDate = addDaysToDateString(checkDate, -1);
       continue;
     }
 
     const completedSet = completionsByDate.get(checkDate) || new Set();
-    const completedCount = scheduled.filter((t) =>
-      completedSet.has(t.taskId)
-    ).length;
+    const completedCount = scheduled.filter((t) => completedSet.has(t.taskId)).length;
 
     if (completedCount > 0) {
       currentStreak++;
@@ -166,34 +161,96 @@ export function calculateOverallStreaks(
     }
   }
 
-  // Count perfect days (past 90 days)
+  // 2. Single-pass historic scan (past 90 days) for perfect days and per-task longest streaks
   let perfectDaysCount = 0;
   let longestStreak = currentStreak;
   let rollingStreak = 0;
-  let scanDate = addDaysToDateString(todayStr, -90);
+
+  // Track task streaks
+  const taskCurrentStreaks: Record<string, number> = {};
+  const taskLongestStreaks: Record<string, number> = {};
+  const taskRunningStreaks: Record<string, number> = {};
+
+  activeTasks.forEach((t) => {
+    taskCurrentStreaks[t.taskId] = 0;
+    taskLongestStreaks[t.taskId] = 0;
+    taskRunningStreaks[t.taskId] = 0;
+  });
+
+  const scanDays = 90;
+  let scanDate = addDaysToDateString(todayStr, -scanDays);
 
   while (scanDate <= todayStr) {
-    const scheduled = activeTasks.filter((t) =>
-      isTaskScheduledOnDate(t, scanDate)
-    );
-    if (scheduled.length > 0) {
-      const completedSet = completionsByDate.get(scanDate) || new Set();
-      const completedCount = scheduled.filter((t) =>
-        completedSet.has(t.taskId)
-      ).length;
+    const isToday = scanDate === todayStr;
+    const scheduled = activeTasks.filter((t) => isTaskScheduledOnDate(t, scanDate));
+    const completedSet = completionsByDate.get(scanDate) || new Set();
 
-      if (completedCount === scheduled.length) {
+    if (scheduled.length > 0) {
+      const completedCount = scheduled.filter((t) => completedSet.has(t.taskId)).length;
+
+      if (completedCount === scheduled.length && completedCount > 0) {
         perfectDaysCount++;
       }
 
       if (completedCount > 0) {
         rollingStreak++;
         if (rollingStreak > longestStreak) longestStreak = rollingStreak;
-      } else {
+      } else if (!isToday) {
         rollingStreak = 0;
       }
     }
+
+    // Per-task running streak
+    for (let i = 0; i < activeTasks.length; i++) {
+      const task = activeTasks[i];
+      if (isTaskScheduledOnDate(task, scanDate)) {
+        if (completedSet.has(task.taskId)) {
+          taskRunningStreaks[task.taskId] = (taskRunningStreaks[task.taskId] || 0) + 1;
+          if (taskRunningStreaks[task.taskId] > (taskLongestStreaks[task.taskId] || 0)) {
+            taskLongestStreaks[task.taskId] = taskRunningStreaks[task.taskId];
+          }
+        } else if (!isToday) {
+          taskRunningStreaks[task.taskId] = 0;
+        }
+      }
+    }
+
     scanDate = addDaysToDateString(scanDate, 1);
+  }
+
+  // 3. Compute per-task current streak going backward from today
+  const taskStreaks: Record<string, { current: number; longest: number }> = {};
+  for (let i = 0; i < activeTasks.length; i++) {
+    const task = activeTasks[i];
+    let tStreak = 0;
+    let tDate = todayStr;
+    const isTodaySched = isTaskScheduledOnDate(task, todayStr);
+    const isTodayDone = completedTaskDates.has(`${task.taskId}_${todayStr}`);
+
+    if (isTodaySched && isTodayDone) {
+      tStreak++;
+      tDate = addDaysToDateString(todayStr, -1);
+    } else {
+      tDate = addDaysToDateString(todayStr, -1);
+    }
+
+    let tSafety = 0;
+    while (tSafety < 60) {
+      tSafety++;
+      if (isTaskScheduledOnDate(task, tDate)) {
+        if (completedTaskDates.has(`${task.taskId}_${tDate}`)) {
+          tStreak++;
+        } else {
+          break;
+        }
+      }
+      tDate = addDaysToDateString(tDate, -1);
+    }
+
+    taskStreaks[task.taskId] = {
+      current: tStreak,
+      longest: Math.max(taskLongestStreaks[task.taskId] || 0, tStreak),
+    };
   }
 
   return {

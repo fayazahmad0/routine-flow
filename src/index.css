@@ -44,3 +44,25 @@
 .dark ::-webkit-scrollbar-thumb:hover {
   background: #3F3D3A;
 }
+
+/* Ensure Netlify badge or third-party overlays do not obscure mobile bottom navigation */
+#netlify-badge,
+.netlify-badge,
+[data-netlify-badge],
+iframe[src*="netlify"] {
+  bottom: 84px !important;
+  z-index: 30 !important;
+  pointer-events: auto;
+}
+
+@media (max-width: 768px) {
+  #netlify-badge,
+  .netlify-badge,
+  [data-netlify-badge],
+  iframe[src*="netlify"] {
+    bottom: 88px !important;
+    right: 12px !important;
+    transform: scale(0.85);
+    transform-origin: bottom right;
+  }
+}
