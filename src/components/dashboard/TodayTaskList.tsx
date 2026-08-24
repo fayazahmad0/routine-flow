@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, memo, useCallback } from 'react';
+import React, { useState, memo, useCallback, startTransition } from 'react';
 import { useRoutine } from '../../context/RoutineContext';
 import { Task, Category } from '../../types';
 import { IconRenderer } from '../common/IconRenderer';
@@ -19,6 +19,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { mobilePerfProfiler } from '../../utils/mobilePerfProfiler';
 
 interface TodayTaskRowProps {
   task: Task;
@@ -89,10 +90,18 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
     }, [actualValue, completed, task.targetValue]);
 
     const hasStepper = task.type === 'duration' || task.type === 'quantity' || task.type === 'target';
+    const lastTouchTimeRef = React.useRef<number>(0);
+
+    const handleTouchStart = () => {
+      lastTouchTimeRef.current = performance.now();
+    };
 
     // Immediate synchronous checkbox tap handler
     const handleCheckboxClick = (e: React.MouseEvent) => {
       e.stopPropagation();
+      const touchTime = lastTouchTimeRef.current || performance.now();
+      const interactionId = mobilePerfProfiler.startInteraction('checkbox', task.taskId, touchTime);
+
       const nextCompleted = !localCompletedRef.current;
       localCompletedRef.current = nextCompleted;
       
@@ -104,13 +113,21 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
         setLocalVal(nextVal);
       }
 
-      // Background synchronization
-      onToggle(task.taskId, nextCompleted);
+      mobilePerfProfiler.recordStateUpdate(interactionId);
+      mobilePerfProfiler.finishInteraction(interactionId);
+
+      // Decouple background context & cloud persistence outside the critical touch-paint frame
+      startTransition(() => {
+        onToggle(task.taskId, nextCompleted);
+      });
     };
 
     // Immediate synchronous stepper increment handler with debounced background sync
     const handleStepIncrement = (e: React.MouseEvent) => {
       e.stopPropagation();
+      const touchTime = lastTouchTimeRef.current || performance.now();
+      const interactionId = mobilePerfProfiler.startInteraction('plus', task.taskId, touchTime);
+
       const step = task.type === 'duration' && task.targetUnit?.toLowerCase().includes('min') ? 5 : 1;
       const nextVal = localValRef.current + step;
       localValRef.current = nextVal;
@@ -123,6 +140,9 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
         setLocalCompleted(isTargetMet);
       }
 
+      mobilePerfProfiler.recordStateUpdate(interactionId);
+      mobilePerfProfiler.finishInteraction(interactionId);
+
       // Coalesce rapid clicks into single background persistence call
       isSteppingRef.current = true;
       if (stepperDebounceRef.current) {
@@ -131,7 +151,9 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
       stepperDebounceRef.current = setTimeout(() => {
         isSteppingRef.current = false;
         if (isMountedRef.current) {
-          onIncrement(task, localValRef.current);
+          startTransition(() => {
+            onIncrement(task, localValRef.current);
+          });
         }
       }, 200);
     };
@@ -139,6 +161,9 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
     // Immediate synchronous stepper decrement handler with debounced background sync
     const handleStepDecrement = (e: React.MouseEvent) => {
       e.stopPropagation();
+      const touchTime = lastTouchTimeRef.current || performance.now();
+      const interactionId = mobilePerfProfiler.startInteraction('minus', task.taskId, touchTime);
+
       const step = task.type === 'duration' && task.targetUnit?.toLowerCase().includes('min') ? 5 : 1;
       const nextVal = Math.max(0, localValRef.current - step);
       localValRef.current = nextVal;
@@ -151,6 +176,9 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
         setLocalCompleted(isTargetMet);
       }
 
+      mobilePerfProfiler.recordStateUpdate(interactionId);
+      mobilePerfProfiler.finishInteraction(interactionId);
+
       // Coalesce rapid clicks into single background persistence call
       isSteppingRef.current = true;
       if (stepperDebounceRef.current) {
@@ -159,7 +187,9 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
       stepperDebounceRef.current = setTimeout(() => {
         isSteppingRef.current = false;
         if (isMountedRef.current) {
-          onDecrement(task, localValRef.current);
+          startTransition(() => {
+            onDecrement(task, localValRef.current);
+          });
         }
       }, 200);
     };
@@ -180,6 +210,8 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
             {/* Touch-optimized 48x48px Checkbox Area with instant visual feedback */}
             <button
               type="button"
+              onPointerDown={handleTouchStart}
+              onTouchStart={handleTouchStart}
               onClick={handleCheckboxClick}
               id={`task-toggle-${task.taskId}`}
               className="min-w-[48px] min-h-[48px] -ml-2.5 -mt-2 p-2.5 flex items-center justify-center rounded-xl cursor-pointer group shrink-0 touch-manipulation active:scale-90 transition-transform duration-75"
@@ -214,6 +246,8 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
             {/* Task Title & Reminder */}
             <div
               className="min-w-0 flex-1 cursor-pointer pt-0.5 touch-manipulation"
+              onPointerDown={handleTouchStart}
+              onTouchStart={handleTouchStart}
               onClick={handleCheckboxClick}
             >
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
@@ -328,6 +362,8 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
             <div className="flex items-center bg-[#F2EDE4] dark:bg-[#252422] border border-[#DDD7CD] dark:border-[#353330] rounded-xl p-0.5 text-xs font-mono shadow-2xs shrink-0 ml-auto touch-manipulation">
               <button
                 type="button"
+                onPointerDown={handleTouchStart}
+                onTouchStart={handleTouchStart}
                 onClick={handleStepDecrement}
                 className="w-8 h-8 flex items-center justify-center text-[#57534E] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded-lg hover:bg-white dark:hover:bg-[#1A1918] active:scale-75 active:bg-white/90 dark:active:bg-[#1A1918] transition-transform duration-75 cursor-pointer touch-manipulation select-none"
                 aria-label="Decrease value"
@@ -342,6 +378,8 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
 
               <button
                 type="button"
+                onPointerDown={handleTouchStart}
+                onTouchStart={handleTouchStart}
                 onClick={handleStepIncrement}
                 className="w-8 h-8 flex items-center justify-center text-[#57534E] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded-lg hover:bg-white dark:hover:bg-[#1A1918] active:scale-75 active:bg-white/90 dark:active:bg-[#1A1918] transition-transform duration-75 cursor-pointer touch-manipulation select-none"
                 aria-label="Increase value"
@@ -387,21 +425,21 @@ export const TodayTaskList: React.FC<TodayTaskListProps> = React.memo(({ onEditT
     (taskId: string, targetCompleted: boolean) => {
       toggleTaskCompletion(taskId, todayDateStr, targetCompleted);
 
-      // Trigger soft celebratory confetti asynchronously without blocking frame
+      // Trigger soft celebratory confetti asynchronously after UI has painted
       if (targetCompleted) {
-        requestAnimationFrame(() => {
+        setTimeout(() => {
           try {
             confetti({
-              particleCount: 28,
-              spread: 50,
-              origin: { y: 0.8 },
+              particleCount: 24,
+              spread: 45,
+              origin: { y: 0.85 },
               colors: ['#6366f1', '#10b981', '#f59e0b', '#ec4899'],
               disableForReducedMotion: true,
             });
           } catch (e) {
             // Safe fallback
           }
-        });
+        }, 150);
       }
     },
     [toggleTaskCompletion, todayDateStr]

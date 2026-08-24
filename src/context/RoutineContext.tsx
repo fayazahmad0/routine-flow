@@ -11,6 +11,7 @@ import React, {
   useMemo,
   useCallback,
   useRef,
+  useDeferredValue,
 } from 'react';
 import {
   collection,
@@ -297,15 +298,19 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return map;
   }, [completions]);
 
-  // Calculate Streaks
-  const streakStats = useMemo(() => {
-    return calculateOverallStreaks(tasks, completions, todayDateStr);
-  }, [tasks, completions, todayDateStr]);
+  // Heavy computations deferred so they NEVER block 0ms task touch feedback
+  const deferredCompletions = useDeferredValue(completions);
+  const deferredTasks = useDeferredValue(tasks);
 
-  // Smart insights
+  // Calculate Streaks (deferred)
+  const streakStats = useMemo(() => {
+    return calculateOverallStreaks(deferredTasks, deferredCompletions, todayDateStr);
+  }, [deferredTasks, deferredCompletions, todayDateStr]);
+
+  // Smart insights (deferred)
   const smartInsights = useMemo(() => {
-    return generateSmartInsights(tasks, completions, todayDateStr, streakStats);
-  }, [tasks, completions, todayDateStr, streakStats]);
+    return generateSmartInsights(deferredTasks, deferredCompletions, todayDateStr, streakStats);
+  }, [deferredTasks, deferredCompletions, todayDateStr, streakStats]);
 
   // Check achievements automatically (debounced so it never blocks UI tick)
   useEffect(() => {

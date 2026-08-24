@@ -15,6 +15,7 @@ import { Sidebar } from './components/layout/Sidebar';
 import { MobileNav } from './components/layout/MobileNav';
 import { Toast } from './components/common/Toast';
 import { OfflineBanner } from './components/common/OfflineBanner';
+import { MobilePerfHUD } from './components/dev/MobilePerfHUD';
 
 // Views - Dashboard and Tasks are eagerly loaded for 0ms instant response
 import { LoginView } from './components/auth/LoginView';
@@ -180,6 +181,9 @@ const AppContent: React.FC = () => {
 
       {/* Offline Status Warning */}
       {!isOnline && <OfflineBanner />}
+
+      {/* Realtime Mobile Performance Diagnostics HUD */}
+      <MobilePerfHUD />
     </div>
   );
 };
