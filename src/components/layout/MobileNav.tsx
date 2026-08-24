@@ -14,7 +14,7 @@ interface MobileNavProps {
   onOpenAddTask: () => void;
 }
 
-export const MobileNav: React.FC<MobileNavProps> = ({
+export const MobileNav: React.FC<MobileNavProps> = React.memo(({
   activeTab,
   onSelectTab,
   onOpenAddTask,
@@ -81,4 +81,6 @@ export const MobileNav: React.FC<MobileNavProps> = ({
       </div>
     </nav>
   );
-};
+});
+
+MobileNav.displayName = 'MobileNav';

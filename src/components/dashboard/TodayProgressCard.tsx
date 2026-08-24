@@ -9,7 +9,7 @@ import { ProgressRing } from '../common/ProgressRing';
 import { CheckCircle2, Clock, Flame, Sparkles } from 'lucide-react';
 import { motion } from 'motion/react';
 
-export const TodayProgressCard: React.FC = () => {
+export const TodayProgressCard: React.FC = React.memo(() => {
   const { todayProgress, streakStats } = useRoutine();
   const { percentage, completedCount, totalCount, remainingCount } = todayProgress;
 
@@ -71,4 +71,6 @@ export const TodayProgressCard: React.FC = () => {
       </div>
     </div>
   );
-};
+});
+
+TodayProgressCard.displayName = 'TodayProgressCard';

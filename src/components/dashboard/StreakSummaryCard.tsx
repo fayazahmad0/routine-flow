@@ -7,7 +7,7 @@ import React from 'react';
 import { useRoutine } from '../../context/RoutineContext';
 import { Flame, Trophy, Award, Sparkles } from 'lucide-react';
 
-export const StreakSummaryCard: React.FC = () => {
+export const StreakSummaryCard: React.FC = React.memo(() => {
   const { streakStats } = useRoutine();
   const { currentStreak, longestStreak, perfectDaysCount } = streakStats;
 
@@ -54,4 +54,6 @@ export const StreakSummaryCard: React.FC = () => {
       </div>
     </div>
   );
-};
+});
+
+StreakSummaryCard.displayName = 'StreakSummaryCard';

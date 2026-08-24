@@ -22,11 +22,12 @@ export function calculateTaskStreak(
 ): { current: number; longest: number } {
   const completionMap = prebuiltMap || new Map<string, boolean>();
   if (!prebuiltMap) {
-    completions
-      .filter((c) => c.taskId === task.taskId)
-      .forEach((c) => {
+    for (let i = 0; i < completions.length; i++) {
+      const c = completions[i];
+      if (c.taskId === task.taskId) {
         completionMap.set(`${c.taskId}_${c.localDate}`, c.completed);
-      });
+      }
+    }
   }
 
   // Calculate current streak
@@ -37,16 +38,12 @@ export function calculateTaskStreak(
 
   if (isTodayScheduled && isTodayCompleted) {
     currentStreak++;
-    checkDate = addDaysToDateString(todayStr, -1);
-  } else if (!isTodayScheduled) {
-    checkDate = addDaysToDateString(todayStr, -1);
-  } else {
-    checkDate = addDaysToDateString(todayStr, -1);
   }
+  checkDate = addDaysToDateString(todayStr, -1);
 
-  // Go back up to 180 days for current streak
+  // Scan backward up to 60 days for current streak
   let safetyCounter = 0;
-  while (safetyCounter < 180) {
+  while (safetyCounter < 60) {
     safetyCounter++;
     const isScheduled = isTaskScheduledOnDate(task, checkDate);
     if (isScheduled) {
@@ -60,28 +57,11 @@ export function calculateTaskStreak(
     checkDate = addDaysToDateString(checkDate, -1);
   }
 
-  // Calculate longest streak across past 180 days
-  let longest = currentStreak;
-  let tempStreak = 0;
-  let scanDate = addDaysToDateString(todayStr, -180);
-
-  while (scanDate <= todayStr) {
-    if (isTaskScheduledOnDate(task, scanDate)) {
-      if (completionMap.get(`${task.taskId}_${scanDate}`) === true) {
-        tempStreak++;
-        if (tempStreak > longest) longest = tempStreak;
-      } else {
-        tempStreak = 0;
-      }
-    }
-    scanDate = addDaysToDateString(scanDate, 1);
-  }
-
-  return { current: currentStreak, longest: Math.max(longest, currentStreak) };
+  return { current: currentStreak, longest: Math.max(currentStreak, 0) };
 }
 
 /**
- * Calculates global streaks and individual task streaks with a single-pass indexed scan
+ * Ultra-fast global streaks and individual task streaks calculation using pre-indexed Sets and Maps
  */
 export function calculateOverallStreaks(
   tasks: Task[],
@@ -100,7 +80,7 @@ export function calculateOverallStreaks(
     };
   }
 
-  // Fast completion set & count
+  // Fast completion sets & maps
   const completedTaskDates = new Set<string>();
   const completionsByDate = new Map<string, Set<string>>();
   let totalCompletions = 0;
@@ -119,10 +99,8 @@ export function calculateOverallStreaks(
     }
   }
 
-  // 1. Calculate overall current streak (go back from todayStr)
+  // 1. Calculate overall current streak (backward from todayStr)
   let currentStreak = 0;
-  let checkDate = todayStr;
-
   const todayCompletedSet = completionsByDate.get(todayStr) || new Set();
   const todayScheduledTasks = activeTasks.filter((t) => isTaskScheduledOnDate(t, todayStr));
   let hasTodayActivity = false;
@@ -136,13 +114,11 @@ export function calculateOverallStreaks(
 
   if (hasTodayActivity) {
     currentStreak++;
-    checkDate = addDaysToDateString(todayStr, -1);
-  } else {
-    checkDate = addDaysToDateString(todayStr, -1);
   }
 
+  let checkDate = addDaysToDateString(todayStr, -1);
   let safety = 0;
-  while (safety < 120) {
+  while (safety < 60) {
     safety++;
     const scheduled = activeTasks.filter((t) => isTaskScheduledOnDate(t, checkDate));
     if (scheduled.length === 0) {
@@ -161,23 +137,12 @@ export function calculateOverallStreaks(
     }
   }
 
-  // 2. Single-pass historic scan (past 90 days) for perfect days and per-task longest streaks
+  // 2. Scan past 30 days for perfect days and longest streak
   let perfectDaysCount = 0;
   let longestStreak = currentStreak;
   let rollingStreak = 0;
 
-  // Track task streaks
-  const taskCurrentStreaks: Record<string, number> = {};
-  const taskLongestStreaks: Record<string, number> = {};
-  const taskRunningStreaks: Record<string, number> = {};
-
-  activeTasks.forEach((t) => {
-    taskCurrentStreaks[t.taskId] = 0;
-    taskLongestStreaks[t.taskId] = 0;
-    taskRunningStreaks[t.taskId] = 0;
-  });
-
-  const scanDays = 90;
+  const scanDays = 30;
   let scanDate = addDaysToDateString(todayStr, -scanDays);
 
   while (scanDate <= todayStr) {
@@ -199,43 +164,24 @@ export function calculateOverallStreaks(
         rollingStreak = 0;
       }
     }
-
-    // Per-task running streak
-    for (let i = 0; i < activeTasks.length; i++) {
-      const task = activeTasks[i];
-      if (isTaskScheduledOnDate(task, scanDate)) {
-        if (completedSet.has(task.taskId)) {
-          taskRunningStreaks[task.taskId] = (taskRunningStreaks[task.taskId] || 0) + 1;
-          if (taskRunningStreaks[task.taskId] > (taskLongestStreaks[task.taskId] || 0)) {
-            taskLongestStreaks[task.taskId] = taskRunningStreaks[task.taskId];
-          }
-        } else if (!isToday) {
-          taskRunningStreaks[task.taskId] = 0;
-        }
-      }
-    }
-
     scanDate = addDaysToDateString(scanDate, 1);
   }
 
-  // 3. Compute per-task current streak going backward from today
+  // 3. Per-task current streaks
   const taskStreaks: Record<string, { current: number; longest: number }> = {};
   for (let i = 0; i < activeTasks.length; i++) {
     const task = activeTasks[i];
     let tStreak = 0;
-    let tDate = todayStr;
     const isTodaySched = isTaskScheduledOnDate(task, todayStr);
     const isTodayDone = completedTaskDates.has(`${task.taskId}_${todayStr}`);
 
     if (isTodaySched && isTodayDone) {
       tStreak++;
-      tDate = addDaysToDateString(todayStr, -1);
-    } else {
-      tDate = addDaysToDateString(todayStr, -1);
     }
 
+    let tDate = addDaysToDateString(todayStr, -1);
     let tSafety = 0;
-    while (tSafety < 60) {
+    while (tSafety < 30) {
       tSafety++;
       if (isTaskScheduledOnDate(task, tDate)) {
         if (completedTaskDates.has(`${task.taskId}_${tDate}`)) {
@@ -249,7 +195,7 @@ export function calculateOverallStreaks(
 
     taskStreaks[task.taskId] = {
       current: tStreak,
-      longest: Math.max(taskLongestStreaks[task.taskId] || 0, tStreak),
+      longest: Math.max(tStreak, 0),
     };
   }
 

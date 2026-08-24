@@ -20,7 +20,7 @@ interface DashboardViewProps {
   onEditTask: (task: Task) => void;
 }
 
-export const DashboardView: React.FC<DashboardViewProps> = ({
+export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
   onOpenAddTask,
   onEditTask,
 }) => {
@@ -79,4 +79,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
     </div>
   );
-};
+});
+
+DashboardView.displayName = 'DashboardView';

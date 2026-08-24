@@ -114,7 +114,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ onOpenAddTask, onEditTask 
               placeholder="Search habits and routines..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-[#1A1918] border border-[#E8E3DA] dark:border-[#282725] rounded-xl text-xs sm:text-sm font-medium text-[#1A1A1A] dark:text-[#F3EFEA] placeholder-[#A8A29E] dark:placeholder-[#66625D] focus:outline-none focus:border-[#1A1A1A] dark:focus:border-[#F3EFEA]"
+              className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-[#1A1918] border border-[#E8E3DA] dark:border-[#282725] rounded-xl text-xs sm:text-sm font-medium text-[#1A1A1A] dark:text-[#F3EFEA] placeholder-[#78716C] dark:placeholder-[#8C8780] focus:outline-none focus:border-[#1A1A1A] dark:focus:border-[#F3EFEA]"
             />
           </div>
 

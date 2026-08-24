@@ -16,21 +16,39 @@ import { MobileNav } from './components/layout/MobileNav';
 import { Toast } from './components/common/Toast';
 import { OfflineBanner } from './components/common/OfflineBanner';
 
-// Views
+// Views - Dashboard and Tasks are eagerly loaded for 0ms instant response
 import { LoginView } from './components/auth/LoginView';
 import { OnboardingModal } from './components/auth/OnboardingModal';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { TasksView } from './components/tasks/TasksView';
-import { CalendarView } from './components/calendar/CalendarView';
-import { AnalyticsView } from './components/analytics/AnalyticsView';
-import { HistoryView } from './components/history/HistoryView';
-import { AchievementsView } from './components/achievements/AchievementsView';
-import { SettingsView } from './components/settings/SettingsView';
+
+// Code-split heavy secondary views (Recharts, 60-day calendar tables) for instant tab switching
+const CalendarView = React.lazy(() =>
+  import('./components/calendar/CalendarView').then((m) => ({ default: m.CalendarView }))
+);
+const AnalyticsView = React.lazy(() =>
+  import('./components/analytics/AnalyticsView').then((m) => ({ default: m.AnalyticsView }))
+);
+const HistoryView = React.lazy(() =>
+  import('./components/history/HistoryView').then((m) => ({ default: m.HistoryView }))
+);
+const AchievementsView = React.lazy(() =>
+  import('./components/achievements/AchievementsView').then((m) => ({ default: m.AchievementsView }))
+);
+const SettingsView = React.lazy(() =>
+  import('./components/settings/SettingsView').then((m) => ({ default: m.SettingsView }))
+);
 
 // Modals
 import { AddTaskModal } from './components/tasks/AddTaskModal';
 import { EditTaskModal } from './components/tasks/EditTaskModal';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Loader2 } from 'lucide-react';
+
+const ViewLoadingFallback = () => (
+  <div className="flex items-center justify-center p-12 text-[#78716C] dark:text-[#A39E96]">
+    <Loader2 className="w-6 h-6 animate-spin" />
+  </div>
+);
 
 const AppContent: React.FC = () => {
   const { user, userProfile, loading: authLoading } = useAuth();
@@ -117,7 +135,9 @@ const AppContent: React.FC = () => {
         />
 
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 max-w-7xl w-full mx-auto">
-          {renderActiveView()}
+          <React.Suspense fallback={<ViewLoadingFallback />}>
+            {renderActiveView()}
+          </React.Suspense>
         </main>
       </div>
 

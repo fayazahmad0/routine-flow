@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { useRoutine } from '../../context/RoutineContext';
-import { MoodType, Category } from '../../types';
+import { MoodType, Category, Task } from '../../types';
 import {
   X,
   ChevronLeft,
@@ -35,6 +35,83 @@ const MOODS: { id: MoodType; label: string; emoji: string }[] = [
   { id: 'okay', label: 'Okay', emoji: '😐' },
   { id: 'bad', label: 'Rough', emoji: '😔' },
 ];
+
+interface DailyDetailTaskRowProps {
+  task: Task;
+  completed: boolean;
+  actualValue?: number;
+  dateStr: string;
+  isFuture: boolean;
+  category?: Category;
+  onToggle: (taskId: string, dateStr: string, nextCompleted: boolean) => void;
+}
+
+const DailyDetailTaskRow: React.FC<DailyDetailTaskRowProps> = ({
+  task,
+  completed,
+  actualValue,
+  dateStr,
+  isFuture,
+  category,
+  onToggle,
+}) => {
+  const [localCompleted, setLocalCompleted] = useState<boolean>(completed);
+
+  useEffect(() => {
+    setLocalCompleted(completed);
+  }, [completed]);
+
+  const handleClick = () => {
+    if (isFuture) return;
+    const nextCompleted = !localCompleted;
+    setLocalCompleted(nextCompleted);
+    onToggle(task.taskId, dateStr, nextCompleted);
+  };
+
+  return (
+    <div
+      onClick={handleClick}
+      className={`flex items-center justify-between p-3 rounded-xl border transition-all touch-manipulation active:scale-[0.99] ${
+        isFuture ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+      } ${
+        localCompleted
+          ? 'bg-[#EBF5EE] dark:bg-[#1E2E24] border-[#CDE5D5] dark:border-[#2A4434]'
+          : 'bg-white dark:bg-[#1A1918] border-[#E8E3DA] dark:border-[#282725]'
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        <div
+          className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all ${
+            localCompleted
+              ? 'bg-[#2D5A43] dark:bg-[#68B087] text-white dark:text-[#121212]'
+              : 'border-2 border-[#D0C9BE] dark:border-[#4A4744]'
+          }`}
+        >
+          {localCompleted && <Check className="w-4 h-4 stroke-[3]" />}
+        </div>
+
+        <div>
+          <p className={`text-sm font-semibold ${localCompleted ? 'line-through text-[#78716C]' : 'text-[#1A1A1A] dark:text-[#F3EFEA]'}`}>
+            {task.title}
+          </p>
+          <p className="text-[11px] font-mono text-[#78716C] dark:text-[#A39E96]">
+            {category?.name} {task.targetValue ? `• Target: ${task.targetValue} ${task.targetUnit || ''}` : ''}
+          </p>
+        </div>
+      </div>
+
+      <span
+        className={`text-xs font-mono font-bold px-2.5 py-1 rounded-lg ${
+          localCompleted
+            ? 'bg-[#D6EBE0] dark:bg-[#253D30] text-[#2D5A43] dark:text-[#68B087]'
+            : 'bg-[#F2EDE4] dark:bg-[#22211F] text-[#78716C] dark:text-[#A39E96]'
+        }`}
+      >
+        {localCompleted ? 'Fulfilled' : 'Pending'}
+      </span>
+    </div>
+  );
+};
 
 export const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
   dateStr,
@@ -180,52 +257,18 @@ export const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
               </p>
             ) : (
               <div className="space-y-2">
-                {performance.tasks.map(({ task, completed, actualValue }) => {
-                  const category = getCategory(task.categoryId);
-
-                  return (
-                    <div
-                      key={task.taskId}
-                      onClick={() => !isFuture && toggleTaskCompletion(task.taskId, dateStr, !completed)}
-                      className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
-                        completed
-                          ? 'bg-[#EBF5EE] dark:bg-[#1E2E24] border-[#CDE5D5] dark:border-[#2A4434]'
-                          : 'bg-white dark:bg-[#1A1918] border-[#E8E3DA] dark:border-[#282725]'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                            completed
-                              ? 'bg-[#2D5A43] dark:bg-[#68B087] text-white dark:text-[#121212]'
-                              : 'border-2 border-[#D0C9BE] dark:border-[#4A4744]'
-                          }`}
-                        >
-                          {completed && <Check className="w-4 h-4 stroke-[3]" />}
-                        </div>
-
-                        <div>
-                          <p className={`text-sm font-semibold ${completed ? 'line-through text-[#78716C]' : 'text-[#1A1A1A] dark:text-[#F3EFEA]'}`}>
-                            {task.title}
-                          </p>
-                          <p className="text-[11px] font-mono text-[#78716C] dark:text-[#A39E96]">
-                            {category?.name} {task.targetValue ? `• Target: ${task.targetValue} ${task.targetUnit || ''}` : ''}
-                          </p>
-                        </div>
-                      </div>
-
-                      <span
-                        className={`text-xs font-mono font-bold px-2.5 py-1 rounded-lg ${
-                          completed
-                            ? 'bg-[#D6EBE0] dark:bg-[#253D30] text-[#2D5A43] dark:text-[#68B087]'
-                            : 'bg-[#F2EDE4] dark:bg-[#22211F] text-[#78716C] dark:text-[#A39E96]'
-                        }`}
-                      >
-                        {completed ? 'Fulfilled' : 'Pending'}
-                      </span>
-                    </div>
-                  );
-                })}
+                {performance.tasks.map(({ task, completed, actualValue }) => (
+                  <DailyDetailTaskRow
+                    key={task.taskId}
+                    task={task}
+                    completed={completed}
+                    actualValue={actualValue}
+                    dateStr={dateStr}
+                    isFuture={isFuture}
+                    category={getCategory(task.categoryId)}
+                    onToggle={toggleTaskCompletion}
+                  />
+                ))}
               </div>
             )}
           </div>
@@ -262,7 +305,7 @@ export const DailyDetailModal: React.FC<DailyDetailModalProps> = ({
               placeholder="Notes or reflection for this day..."
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              className="w-full p-3 bg-[#FAF8F5] dark:bg-[#161616] border border-[#E8E3DA] dark:border-[#282725] rounded-xl text-xs text-[#1A1A1A] dark:text-[#F3EFEA] placeholder-[#A8A29E] dark:placeholder-[#66625D] focus:outline-none focus:border-[#1A1A1A] dark:focus:border-[#F3EFEA] resize-none"
+              className="w-full p-3 bg-[#FAF8F5] dark:bg-[#161616] border border-[#E8E3DA] dark:border-[#33302D] rounded-xl text-xs font-medium text-[#1A1A1A] dark:text-[#F3EFEA] placeholder-[#78716C] dark:placeholder-[#8C8780] focus:outline-none focus:border-[#1A1A1A] dark:focus:border-[#F3EFEA] resize-none"
             />
 
             <div className="flex justify-end">

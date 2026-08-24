@@ -25,7 +25,7 @@ interface SidebarProps {
   onSelectTab: (tab: ActiveTab) => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab }) => {
+export const Sidebar: React.FC<SidebarProps> = React.memo(({ activeTab, onSelectTab }) => {
   const { streakStats, todayProgress } = useRoutine();
   const { userProfile, signOut } = useAuth();
 
@@ -155,4 +155,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab }) => {
       </div>
     </aside>
   );
-};
+});
+
+Sidebar.displayName = 'Sidebar';

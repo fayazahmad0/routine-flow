@@ -17,7 +17,7 @@ interface HeaderProps {
   activeTab: ActiveTab;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onOpenAddTask, onSelectTab, activeTab }) => {
+export const Header: React.FC<HeaderProps> = React.memo(({ onOpenAddTask, onSelectTab, activeTab }) => {
   const { userProfile, user } = useAuth();
   const { todayDateStr, streakStats, showToast } = useRoutine();
   const { theme, setTheme, isDark } = useTheme();
@@ -136,4 +136,6 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAddTask, onSelectTab, acti
       </div>
     </header>
   );
-};
+});
+
+Header.displayName = 'Header';

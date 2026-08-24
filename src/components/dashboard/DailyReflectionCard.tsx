@@ -15,7 +15,7 @@ const MOODS: { id: MoodType; label: string; icon: string; emoji: string }[] = [
   { id: 'bad', label: 'Rough', icon: 'Frown', emoji: '😔' },
 ];
 
-export const DailyReflectionCard: React.FC = () => {
+export const DailyReflectionCard: React.FC = React.memo(() => {
   const { todayDateStr, dailyRecords, saveDailyRecord } = useRoutine();
   
   const currentRecord = dailyRecords.find((r) => r.localDate === todayDateStr);
@@ -90,14 +90,14 @@ export const DailyReflectionCard: React.FC = () => {
           placeholder="Record a thought, insight, or gratitude from the day..."
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          className="w-full p-3 bg-[#FAF8F5] dark:bg-[#161616] border border-[#E8E3DA] dark:border-[#282725] rounded-xl text-xs text-[#1A1A1A] dark:text-[#F3EFEA] placeholder-[#A8A29E] dark:placeholder-[#66625D] focus:outline-none focus:border-[#1A1A1A] dark:focus:border-[#F3EFEA] resize-none transition-all"
+          className="w-full p-3 bg-[#FAF8F5] dark:bg-[#161616] border border-[#E8E3DA] dark:border-[#33302D] rounded-xl text-xs font-medium text-[#1A1A1A] dark:text-[#F3EFEA] placeholder-[#78716C] dark:placeholder-[#8C8780] focus:outline-none focus:border-[#1A1A1A] dark:focus:border-[#F3EFEA] resize-none transition-all"
         />
         <div className="flex justify-end mt-2">
           <button
             type="button"
             onClick={handleSave}
             disabled={isSaving}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1A1A1A] hover:bg-[#33312E] dark:bg-[#F3EFEA] dark:text-[#121212] text-[#FAF8F5] text-xs font-medium rounded-lg shadow-xs transition-all disabled:opacity-50 cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#1A1A1A] hover:bg-[#33312E] dark:bg-[#F3EFEA] dark:text-[#121212] text-[#FAF8F5] text-xs font-mono font-bold uppercase tracking-wider rounded-lg shadow-xs transition-all disabled:opacity-50 cursor-pointer"
           >
             {isSaved ? (
               <>
@@ -114,4 +114,6 @@ export const DailyReflectionCard: React.FC = () => {
       </div>
     </div>
   );
-};
+});
+
+DailyReflectionCard.displayName = 'DailyReflectionCard';

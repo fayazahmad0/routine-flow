@@ -8,7 +8,7 @@ import { useRoutine } from '../../context/RoutineContext';
 import { Sparkles, TrendingUp, Star, Target, Flame, Trophy } from 'lucide-react';
 import { IconRenderer } from '../common/IconRenderer';
 
-export const InsightsCard: React.FC = () => {
+export const InsightsCard: React.FC = React.memo(() => {
   const { smartInsights } = useRoutine();
 
   if (smartInsights.length === 0) {
@@ -54,4 +54,6 @@ export const InsightsCard: React.FC = () => {
       </div>
     </div>
   );
-};
+});
+
+InsightsCard.displayName = 'InsightsCard';

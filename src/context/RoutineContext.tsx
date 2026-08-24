@@ -20,7 +20,7 @@ import {
   deleteDoc,
   onSnapshot,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType, sanitizeForFirestore } from '../lib/firebase';
+import { db, auth, handleFirestoreError, OperationType, sanitizeForFirestore } from '../lib/firebase';
 import { useAuth } from './AuthContext';
 import {
   Task,
@@ -411,7 +411,8 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const addTask = async (
     taskData: Omit<Task, 'taskId' | 'uid' | 'createdAt' | 'updatedAt'>
   ): Promise<string> => {
-    if (!user) {
+    const currentAuthUser = user || auth.currentUser;
+    if (!currentAuthUser) {
       const msg = 'Please sign in before creating a task.';
       showToast(msg, 'error');
       throw new Error(msg);
@@ -424,6 +425,7 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
       throw new Error(msg);
     }
 
+    const uid = currentAuthUser.uid;
     const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const now = new Date().toISOString();
     const newTask: Task = {
@@ -431,7 +433,7 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
       title,
       description: taskData.description?.trim() ? taskData.description.trim() : '',
       taskId,
-      uid: user.uid,
+      uid,
       categoryId: taskData.categoryId || categories[0]?.categoryId || 'study',
       icon: taskData.icon || 'CheckSquare',
       isActive: taskData.isActive ?? true,
@@ -448,23 +450,18 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return [newTask, ...prev];
     });
 
-    try {
-      await setDoc(doc(db, `users/${user.uid}/tasks`, taskId), sanitizedTask);
-      showToast(`Task "${newTask.title}" added successfully ✓`, 'success');
-      return taskId;
-    } catch (err: any) {
-      console.error('Firestore addTask write error:', err);
-      // Rollback optimistic task on error
-      setTasks((prev) => prev.filter((t) => t.taskId !== taskId));
+    showToast(`Habit "${newTask.title}" saved ✓`, 'success');
 
-      let errorMsg = "Couldn't create the task. Please check your connection.";
-      if (err?.code === 'permission-denied' || err?.message?.includes('permission')) {
-        errorMsg = "Missing or insufficient permissions to create task.";
+    // 2. Non-blocking background persistence
+    setDoc(doc(db, `users/${uid}/tasks`, taskId), sanitizedTask).catch((err: any) => {
+      console.error('Background task write sync notice:', err);
+      if (err?.code === 'permission-denied') {
+        setTasks((prev) => prev.filter((t) => t.taskId !== taskId));
+        showToast('Missing permissions to save task to cloud.', 'error');
       }
-      showToast(errorMsg, 'error');
-      handleFirestoreError(err, OperationType.CREATE, `users/${user.uid}/tasks/${taskId}`);
-      throw err;
-    }
+    });
+
+    return taskId;
   };
 
   const updateTask = async (taskId: string, updates: Partial<Task>): Promise<void> => {
@@ -473,18 +470,17 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const now = new Date().toISOString();
     const cleanUpdates = sanitizeForFirestore({ ...updates, updatedAt: now });
 
-    // Optimistic local update
+    // 1. Optimistic local update (0ms instant)
     setTasks((prev) =>
       prev.map((t) => (t.taskId === taskId ? { ...t, ...updates, updatedAt: now } : t))
     );
+    showToast('Task updated successfully ✓', 'success');
 
-    try {
-      await updateDoc(taskRef, cleanUpdates);
-      showToast('Task updated successfully ✓', 'success');
-    } catch (err) {
+    // 2. Non-blocking background persistence
+    updateDoc(taskRef, cleanUpdates).catch((err) => {
       console.error('Firestore updateTask write error:', err);
       handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}/tasks/${taskId}`);
-    }
+    });
   };
 
   const archiveTask = async (taskId: string): Promise<void> => {
@@ -851,44 +847,80 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
     showToast('Data exported as CSV');
   };
 
+  const contextValue = useMemo(
+    () => ({
+      tasks,
+      activeTasks,
+      completions,
+      categories,
+      dailyRecords,
+      achievements,
+      loading,
+      isOnline,
+      todayDateStr,
+      selectedDateStr,
+      setSelectedDateStr,
+      addTask,
+      updateTask,
+      archiveTask,
+      unarchiveTask,
+      deleteTask,
+      toggleTaskCompletion,
+      updateTaskActualValue,
+      saveDailyRecord,
+      addCategory,
+      deleteCategory,
+      createStarterRoutine,
+      todayTasks,
+      todayProgress,
+      streakStats,
+      smartInsights,
+      getDayPerformance,
+      exportDataAsJson,
+      exportDataAsCsv,
+      toast: toastMessage,
+      toastMessage,
+      showToast,
+      hideToast,
+    }),
+    [
+      tasks,
+      activeTasks,
+      completions,
+      categories,
+      dailyRecords,
+      achievements,
+      loading,
+      isOnline,
+      todayDateStr,
+      selectedDateStr,
+      setSelectedDateStr,
+      addTask,
+      updateTask,
+      archiveTask,
+      unarchiveTask,
+      deleteTask,
+      toggleTaskCompletion,
+      updateTaskActualValue,
+      saveDailyRecord,
+      addCategory,
+      deleteCategory,
+      createStarterRoutine,
+      todayTasks,
+      todayProgress,
+      streakStats,
+      smartInsights,
+      getDayPerformance,
+      exportDataAsJson,
+      exportDataAsCsv,
+      toastMessage,
+      showToast,
+      hideToast,
+    ]
+  );
+
   return (
-    <RoutineContext.Provider
-      value={{
-        tasks,
-        activeTasks,
-        completions,
-        categories,
-        dailyRecords,
-        achievements,
-        loading,
-        isOnline,
-        todayDateStr,
-        selectedDateStr,
-        setSelectedDateStr,
-        addTask,
-        updateTask,
-        archiveTask,
-        unarchiveTask,
-        deleteTask,
-        toggleTaskCompletion,
-        updateTaskActualValue,
-        saveDailyRecord,
-        addCategory,
-        deleteCategory,
-        createStarterRoutine,
-        todayTasks,
-        todayProgress,
-        streakStats,
-        smartInsights,
-        getDayPerformance,
-        exportDataAsJson,
-        exportDataAsCsv,
-        toast: toastMessage,
-        toastMessage,
-        showToast,
-        hideToast,
-      }}
-    >
+    <RoutineContext.Provider value={contextValue}>
       {children}
     </RoutineContext.Provider>
   );

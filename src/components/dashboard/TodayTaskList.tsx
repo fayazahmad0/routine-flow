@@ -27,8 +27,8 @@ interface TodayTaskRowProps {
   category?: Category;
   isMenuOpen: boolean;
   onToggle: (taskId: string, currentCompleted: boolean) => void;
-  onIncrement: (e: React.MouseEvent, task: Task, currentValue: number) => void;
-  onDecrement: (e: React.MouseEvent, task: Task, currentValue: number) => void;
+  onIncrement: (e: React.MouseEvent, task: Task, nextValue: number) => void;
+  onDecrement: (e: React.MouseEvent, task: Task, nextValue: number) => void;
   onToggleMenu: (taskId: string) => void;
   onEditTask: (task: Task) => void;
   onArchiveTask: (taskId: string) => void;
@@ -50,14 +50,108 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
     onArchiveTask,
     onDeleteTask,
   }) => {
-    const currentVal = actualValue ?? (completed ? (task.targetValue || 1) : 0);
+    // 1. INSTANT LOCAL STATE: Ensures 0ms click-to-paint response before any context or network work
+    const initialVal = actualValue !== undefined ? actualValue : (completed ? (task.targetValue || 1) : 0);
+    const [localCompleted, setLocalCompleted] = useState<boolean>(completed);
+    const [localVal, setLocalVal] = useState<number>(initialVal);
+
+    // Timer ref for coalescing rapid stepper taps (+ / -) into a single background sync
+    const stepperDebounceRef = React.useRef<NodeJS.Timeout | null>(null);
+    const isMountedRef = React.useRef(true);
+
+    React.useEffect(() => {
+      isMountedRef.current = true;
+      return () => {
+        isMountedRef.current = false;
+        if (stepperDebounceRef.current) {
+          clearTimeout(stepperDebounceRef.current);
+        }
+      };
+    }, []);
+
+    // Keep local in sync whenever upstream props update from cloud or day change
+    React.useEffect(() => {
+      setLocalCompleted(completed);
+    }, [completed]);
+
+    React.useEffect(() => {
+      if (actualValue !== undefined) {
+        setLocalVal(actualValue);
+      } else {
+        setLocalVal(completed ? (task.targetValue || 1) : 0);
+      }
+    }, [actualValue, completed, task.targetValue]);
+
     const hasStepper = task.type === 'duration' || task.type === 'quantity' || task.type === 'target';
+
+    // Immediate synchronous checkbox tap handler
+    const handleCheckboxClick = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const nextCompleted = !localCompleted;
+      
+      // 0ms Synchronous local state update (React paints in current frame)
+      setLocalCompleted(nextCompleted);
+      if (hasStepper) {
+        setLocalVal(nextCompleted ? (task.targetValue || 1) : 0);
+      }
+
+      // Background synchronization
+      onToggle(task.taskId, localCompleted);
+    };
+
+    // Immediate synchronous stepper increment handler with debounced background sync
+    const handleStepIncrement = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const step = task.type === 'duration' && task.targetUnit?.toLowerCase().includes('min') ? 5 : 1;
+      const nextVal = localVal + step;
+
+      // 0ms Synchronous local state update - user sees new number instantly
+      setLocalVal(nextVal);
+      const isTargetMet = task.targetValue ? nextVal >= task.targetValue : nextVal > 0;
+      if (isTargetMet !== localCompleted) {
+        setLocalCompleted(isTargetMet);
+      }
+
+      // Coalesce rapid clicks into single background persistence call
+      if (stepperDebounceRef.current) {
+        clearTimeout(stepperDebounceRef.current);
+      }
+      stepperDebounceRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
+          onIncrement(e, task, nextVal);
+        }
+      }, 150);
+    };
+
+    // Immediate synchronous stepper decrement handler with debounced background sync
+    const handleStepDecrement = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const step = task.type === 'duration' && task.targetUnit?.toLowerCase().includes('min') ? 5 : 1;
+      const nextVal = Math.max(0, localVal - step);
+
+      // 0ms Synchronous local state update - user sees new number instantly
+      setLocalVal(nextVal);
+      const isTargetMet = task.targetValue ? nextVal >= task.targetValue : nextVal > 0;
+      if (isTargetMet !== localCompleted) {
+        setLocalCompleted(isTargetMet);
+      }
+
+      // Coalesce rapid clicks into single background persistence call
+      if (stepperDebounceRef.current) {
+        clearTimeout(stepperDebounceRef.current);
+      }
+      stepperDebounceRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
+          onDecrement(e, task, nextVal);
+        }
+      }, 150);
+    };
 
     return (
       <div
         id={`task-row-${task.taskId}`}
-        className={`relative rounded-2xl border transition-all duration-150 p-3.5 sm:p-4 ${
-          completed
+        className={`relative rounded-2xl border transition-all duration-150 p-3.5 sm:p-4 touch-manipulation ${
+          localCompleted
             ? 'bg-[#F4F0E8]/85 dark:bg-[#1E1D1B]/90 border-[#DDD7CD] dark:border-[#33302D]'
             : 'bg-white dark:bg-[#1A1918] border-[#E8E3DA] dark:border-[#282725] shadow-xs hover:border-[#D0C9BE] dark:hover:border-[#3A3835]'
         }`}
@@ -66,24 +160,24 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
         <div className="flex items-start justify-between gap-2.5 sm:gap-3">
           {/* Left Group: Checkbox + Category Icon + Title */}
           <div className="flex items-start gap-2.5 sm:gap-3.5 flex-1 min-w-0">
-            {/* Touch-optimized 44x44px Checkbox Area */}
+            {/* Touch-optimized 44x44px Checkbox Area with instant visual feedback */}
             <button
               type="button"
-              onClick={() => onToggle(task.taskId, completed)}
+              onClick={handleCheckboxClick}
               id={`task-toggle-${task.taskId}`}
-              className="min-w-[44px] min-h-[44px] -ml-2 -mt-1 p-2 flex items-center justify-center rounded-xl cursor-pointer group shrink-0"
-              aria-label={`Mark ${task.title} as ${completed ? 'incomplete' : 'completed'}`}
+              className="min-w-[44px] min-h-[44px] -ml-2 -mt-1 p-2 flex items-center justify-center rounded-xl cursor-pointer group shrink-0 touch-manipulation"
+              aria-label={`Mark ${task.title} as ${localCompleted ? 'incomplete' : 'completed'}`}
             >
               <div
-                className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all duration-100 transform active:scale-85 ${
-                  completed
+                className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all duration-75 transform active:scale-80 ${
+                  localCompleted
                     ? 'bg-[#1A1A1A] dark:bg-[#F3EFEA] text-[#FAF8F5] dark:text-[#121212] shadow-xs scale-100 ring-2 ring-[#1A1A1A] dark:ring-[#F3EFEA]'
                     : 'border-2 border-[#C8C2B7] dark:border-[#4A4744] group-hover:border-[#1A1A1A] dark:group-hover:border-[#F3EFEA] text-transparent bg-transparent'
                 }`}
               >
                 <Check
-                  className={`w-4 h-4 stroke-[3] transition-opacity duration-100 ${
-                    completed ? 'opacity-100' : 'opacity-0'
+                  className={`w-4 h-4 stroke-[3] transition-opacity duration-75 ${
+                    localCompleted ? 'opacity-100' : 'opacity-0'
                   }`}
                 />
               </div>
@@ -102,13 +196,13 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
 
             {/* Task Title & Reminder */}
             <div
-              className="min-w-0 flex-1 cursor-pointer pt-0.5"
-              onClick={() => onToggle(task.taskId, completed)}
+              className="min-w-0 flex-1 cursor-pointer pt-0.5 touch-manipulation"
+              onClick={handleCheckboxClick}
             >
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 <h4
-                  className={`text-sm sm:text-base font-semibold tracking-tight transition-colors duration-150 leading-snug break-words ${
-                    completed
+                  className={`text-sm sm:text-base font-semibold tracking-tight transition-colors duration-100 leading-snug break-words ${
+                    localCompleted
                       ? 'text-[#8C8780] dark:text-[#78716C] line-through opacity-80'
                       : 'text-[#1A1A1A] dark:text-[#F3EFEA]'
                   }`}
@@ -137,7 +231,7 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
             <button
               type="button"
               onClick={() => onToggleMenu(task.taskId)}
-              className="min-w-[40px] min-h-[40px] flex items-center justify-center p-2 text-[#78716C] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded-xl hover:bg-[#F2EDE4] dark:hover:bg-[#252422] transition-colors cursor-pointer"
+              className="min-w-[40px] min-h-[40px] flex items-center justify-center p-2 text-[#78716C] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded-xl hover:bg-[#F2EDE4] dark:hover:bg-[#252422] active:scale-90 transition-all cursor-pointer touch-manipulation"
               aria-label="Task options"
             >
               <MoreVertical className="w-4 h-4" />
@@ -212,27 +306,27 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
             )}
           </div>
 
-          {/* Right Stepper (for duration/quantity/target tasks) */}
+          {/* Right Stepper (for duration/quantity/target tasks) with 0ms tactile response */}
           {hasStepper && (
-            <div className="flex items-center bg-[#F2EDE4] dark:bg-[#252422] border border-[#DDD7CD] dark:border-[#353330] rounded-xl p-0.5 text-xs font-mono shadow-2xs shrink-0 ml-auto">
+            <div className="flex items-center bg-[#F2EDE4] dark:bg-[#252422] border border-[#DDD7CD] dark:border-[#353330] rounded-xl p-0.5 text-xs font-mono shadow-2xs shrink-0 ml-auto touch-manipulation">
               <button
                 type="button"
-                onClick={(e) => onDecrement(e, task, currentVal)}
-                className="w-8 h-8 flex items-center justify-center text-[#57534E] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded-lg hover:bg-white dark:hover:bg-[#1A1918] active:scale-85 transition-all cursor-pointer"
+                onClick={handleStepDecrement}
+                className="w-8 h-8 flex items-center justify-center text-[#57534E] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded-lg hover:bg-white dark:hover:bg-[#1A1918] active:scale-80 active:bg-white/80 transition-transform cursor-pointer touch-manipulation select-none"
                 aria-label="Decrease value"
               >
                 <Minus className="w-3.5 h-3.5 stroke-[2.5]" />
               </button>
 
-              <span className="px-2.5 font-bold text-[#1A1A1A] dark:text-[#F3EFEA] min-w-[50px] text-center">
-                {currentVal}
+              <span className="px-2.5 font-bold text-[#1A1A1A] dark:text-[#F3EFEA] min-w-[50px] text-center select-none">
+                {localVal}
                 {task.targetUnit ? ` ${task.targetUnit}` : ''}
               </span>
 
               <button
                 type="button"
-                onClick={(e) => onIncrement(e, task, currentVal)}
-                className="w-8 h-8 flex items-center justify-center text-[#57534E] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded-lg hover:bg-white dark:hover:bg-[#1A1918] active:scale-85 transition-all cursor-pointer"
+                onClick={handleStepIncrement}
+                className="w-8 h-8 flex items-center justify-center text-[#57534E] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded-lg hover:bg-white dark:hover:bg-[#1A1918] active:scale-80 active:bg-white/80 transition-transform cursor-pointer touch-manipulation select-none"
                 aria-label="Increase value"
               >
                 <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -252,7 +346,7 @@ interface TodayTaskListProps {
   onOpenAddTask: () => void;
 }
 
-export const TodayTaskList: React.FC<TodayTaskListProps> = ({ onEditTask, onOpenAddTask }) => {
+export const TodayTaskList: React.FC<TodayTaskListProps> = React.memo(({ onEditTask, onOpenAddTask }) => {
   const {
     todayTasks,
     todayDateStr,
@@ -298,20 +392,14 @@ export const TodayTaskList: React.FC<TodayTaskListProps> = ({ onEditTask, onOpen
   );
 
   const handleIncrement = useCallback(
-    (e: React.MouseEvent, task: Task, currentValue: number = 0) => {
-      e.stopPropagation();
-      const step = task.type === 'duration' && task.targetUnit?.toLowerCase().includes('min') ? 5 : 1;
-      const nextVal = currentValue + step;
+    (e: React.MouseEvent, task: Task, nextVal: number) => {
       updateTaskActualValue(task.taskId, todayDateStr, nextVal);
     },
     [updateTaskActualValue, todayDateStr]
   );
 
   const handleDecrement = useCallback(
-    (e: React.MouseEvent, task: Task, currentValue: number = 0) => {
-      e.stopPropagation();
-      const step = task.type === 'duration' && task.targetUnit?.toLowerCase().includes('min') ? 5 : 1;
-      const nextVal = Math.max(0, currentValue - step);
+    (e: React.MouseEvent, task: Task, nextVal: number) => {
       updateTaskActualValue(task.taskId, todayDateStr, nextVal);
     },
     [updateTaskActualValue, todayDateStr]
@@ -379,4 +467,6 @@ export const TodayTaskList: React.FC<TodayTaskListProps> = ({ onEditTask, onOpen
       </div>
     </div>
   );
-};
+});
+
+TodayTaskList.displayName = 'TodayTaskList';
