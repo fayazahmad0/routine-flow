@@ -58,6 +58,12 @@ const AppContent: React.FC = () => {
   const [isAddTaskOpen, setIsAddTaskOpen] = useState<boolean>(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
 
+  const handleOpenAddTask = React.useCallback(() => setIsAddTaskOpen(true), []);
+  const handleCloseAddTask = React.useCallback(() => setIsAddTaskOpen(false), []);
+  const handleEditTask = React.useCallback((task: Task) => setEditingTask(task), []);
+  const handleCloseEditTask = React.useCallback(() => setEditingTask(null), []);
+  const handleSelectTab = React.useCallback((tab: ActiveTab) => setActiveTab(tab), []);
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-[#F9F8F6] dark:bg-[#121212] flex flex-col items-center justify-center p-6 text-center">
@@ -89,15 +95,15 @@ const AppContent: React.FC = () => {
       case 'dashboard':
         return (
           <DashboardView
-            onOpenAddTask={() => setIsAddTaskOpen(true)}
-            onEditTask={(task) => setEditingTask(task)}
+            onOpenAddTask={handleOpenAddTask}
+            onEditTask={handleEditTask}
           />
         );
       case 'tasks':
         return (
           <TasksView
-            onOpenAddTask={() => setIsAddTaskOpen(true)}
-            onEditTask={(task) => setEditingTask(task)}
+            onOpenAddTask={handleOpenAddTask}
+            onEditTask={handleEditTask}
           />
         );
       case 'calendar':
@@ -114,8 +120,8 @@ const AppContent: React.FC = () => {
       default:
         return (
           <DashboardView
-            onOpenAddTask={() => setIsAddTaskOpen(true)}
-            onEditTask={(task) => setEditingTask(task)}
+            onOpenAddTask={handleOpenAddTask}
+            onEditTask={handleEditTask}
           />
         );
     }
@@ -124,14 +130,14 @@ const AppContent: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#F9F8F6] dark:bg-[#121212] text-[#1A1A1A] dark:text-[#F3EFEA] flex flex-col md:flex-row transition-colors">
       {/* Sidebar for Desktop / Tablet */}
-      <Sidebar activeTab={activeTab} onSelectTab={setActiveTab} />
+      <Sidebar activeTab={activeTab} onSelectTab={handleSelectTab} />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen overflow-x-hidden pb-28 sm:pb-32 md:pb-8">
         <Header
           activeTab={activeTab}
-          onSelectTab={setActiveTab}
-          onOpenAddTask={() => setIsAddTaskOpen(true)}
+          onSelectTab={handleSelectTab}
+          onOpenAddTask={handleOpenAddTask}
         />
 
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 max-w-7xl w-full mx-auto">
@@ -144,20 +150,20 @@ const AppContent: React.FC = () => {
       {/* Mobile Bottom Navigation */}
       <MobileNav
         activeTab={activeTab}
-        onSelectTab={setActiveTab}
-        onOpenAddTask={() => setIsAddTaskOpen(true)}
+        onSelectTab={handleSelectTab}
+        onOpenAddTask={handleOpenAddTask}
       />
 
       {/* Global Modals */}
       <AddTaskModal
         isOpen={isAddTaskOpen}
-        onClose={() => setIsAddTaskOpen(false)}
+        onClose={handleCloseAddTask}
       />
 
       <EditTaskModal
         task={editingTask}
         isOpen={editingTask !== null}
-        onClose={() => setEditingTask(null)}
+        onClose={handleCloseEditTask}
       />
 
       {/* Onboarding Dialog for new users */}

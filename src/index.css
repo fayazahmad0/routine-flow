@@ -7,6 +7,15 @@
     --font-mono: 'JetBrains Mono', monospace;
   }
 
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html, body {
+    touch-action: manipulation;
+    -webkit-overflow-scrolling: touch;
+  }
+
   body {
     font-family: var(--font-sans);
     background-color: #F9F8F6;
@@ -20,6 +29,10 @@
 
   h1, h2, h3, .font-serif {
     font-family: var(--font-serif);
+  }
+
+  button, a, input, select, textarea, [role="button"] {
+    touch-action: manipulation;
   }
 }
 
