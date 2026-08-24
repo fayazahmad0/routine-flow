@@ -26,9 +26,9 @@ interface TodayTaskRowProps {
   actualValue?: number;
   category?: Category;
   isMenuOpen: boolean;
-  onToggle: (taskId: string, currentCompleted: boolean) => void;
-  onIncrement: (e: React.MouseEvent, task: Task, nextValue: number) => void;
-  onDecrement: (e: React.MouseEvent, task: Task, nextValue: number) => void;
+  onToggle: (taskId: string, targetCompleted: boolean) => void;
+  onIncrement: (task: Task, nextValue: number) => void;
+  onDecrement: (task: Task, nextValue: number) => void;
   onToggleMenu: (taskId: string) => void;
   onEditTask: (task: Task) => void;
   onArchiveTask: (taskId: string) => void;
@@ -50,12 +50,15 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
     onArchiveTask,
     onDeleteTask,
   }) => {
-    // 1. INSTANT LOCAL STATE: Ensures 0ms click-to-paint response before any context or network work
+    // 1. INSTANT LOCAL STATE WITH REFS: Ensures 0ms click-to-paint response before any context or network work
     const initialVal = actualValue !== undefined ? actualValue : (completed ? (task.targetValue || 1) : 0);
     const [localCompleted, setLocalCompleted] = useState<boolean>(completed);
     const [localVal, setLocalVal] = useState<number>(initialVal);
 
-    // Timer ref for coalescing rapid stepper taps (+ / -) into a single background sync
+    // Synchronous refs to prevent stale closures and prop clobber during rapid tapping
+    const localValRef = React.useRef<number>(initialVal);
+    const localCompletedRef = React.useRef<boolean>(completed);
+    const isSteppingRef = React.useRef<boolean>(false);
     const stepperDebounceRef = React.useRef<NodeJS.Timeout | null>(null);
     const isMountedRef = React.useRef(true);
 
@@ -69,16 +72,19 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
       };
     }, []);
 
-    // Keep local in sync whenever upstream props update from cloud or day change
+    // Sync upstream prop changes only when not actively tapping stepper
     React.useEffect(() => {
-      setLocalCompleted(completed);
+      if (!isSteppingRef.current) {
+        setLocalCompleted(completed);
+        localCompletedRef.current = completed;
+      }
     }, [completed]);
 
     React.useEffect(() => {
-      if (actualValue !== undefined) {
-        setLocalVal(actualValue);
-      } else {
-        setLocalVal(completed ? (task.targetValue || 1) : 0);
+      if (!isSteppingRef.current) {
+        const val = actualValue !== undefined ? actualValue : (completed ? (task.targetValue || 1) : 0);
+        setLocalVal(val);
+        localValRef.current = val;
       }
     }, [actualValue, completed, task.targetValue]);
 
@@ -87,70 +93,81 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
     // Immediate synchronous checkbox tap handler
     const handleCheckboxClick = (e: React.MouseEvent) => {
       e.stopPropagation();
-      const nextCompleted = !localCompleted;
+      const nextCompleted = !localCompletedRef.current;
+      localCompletedRef.current = nextCompleted;
       
       // 0ms Synchronous local state update (React paints in current frame)
       setLocalCompleted(nextCompleted);
       if (hasStepper) {
-        setLocalVal(nextCompleted ? (task.targetValue || 1) : 0);
+        const nextVal = nextCompleted ? (task.targetValue || 1) : 0;
+        localValRef.current = nextVal;
+        setLocalVal(nextVal);
       }
 
       // Background synchronization
-      onToggle(task.taskId, localCompleted);
+      onToggle(task.taskId, nextCompleted);
     };
 
     // Immediate synchronous stepper increment handler with debounced background sync
     const handleStepIncrement = (e: React.MouseEvent) => {
       e.stopPropagation();
       const step = task.type === 'duration' && task.targetUnit?.toLowerCase().includes('min') ? 5 : 1;
-      const nextVal = localVal + step;
+      const nextVal = localValRef.current + step;
+      localValRef.current = nextVal;
 
       // 0ms Synchronous local state update - user sees new number instantly
       setLocalVal(nextVal);
       const isTargetMet = task.targetValue ? nextVal >= task.targetValue : nextVal > 0;
-      if (isTargetMet !== localCompleted) {
+      if (isTargetMet !== localCompletedRef.current) {
+        localCompletedRef.current = isTargetMet;
         setLocalCompleted(isTargetMet);
       }
 
       // Coalesce rapid clicks into single background persistence call
+      isSteppingRef.current = true;
       if (stepperDebounceRef.current) {
         clearTimeout(stepperDebounceRef.current);
       }
       stepperDebounceRef.current = setTimeout(() => {
+        isSteppingRef.current = false;
         if (isMountedRef.current) {
-          onIncrement(e, task, nextVal);
+          onIncrement(task, localValRef.current);
         }
-      }, 150);
+      }, 200);
     };
 
     // Immediate synchronous stepper decrement handler with debounced background sync
     const handleStepDecrement = (e: React.MouseEvent) => {
       e.stopPropagation();
       const step = task.type === 'duration' && task.targetUnit?.toLowerCase().includes('min') ? 5 : 1;
-      const nextVal = Math.max(0, localVal - step);
+      const nextVal = Math.max(0, localValRef.current - step);
+      localValRef.current = nextVal;
 
       // 0ms Synchronous local state update - user sees new number instantly
       setLocalVal(nextVal);
       const isTargetMet = task.targetValue ? nextVal >= task.targetValue : nextVal > 0;
-      if (isTargetMet !== localCompleted) {
+      if (isTargetMet !== localCompletedRef.current) {
+        localCompletedRef.current = isTargetMet;
         setLocalCompleted(isTargetMet);
       }
 
       // Coalesce rapid clicks into single background persistence call
+      isSteppingRef.current = true;
       if (stepperDebounceRef.current) {
         clearTimeout(stepperDebounceRef.current);
       }
       stepperDebounceRef.current = setTimeout(() => {
+        isSteppingRef.current = false;
         if (isMountedRef.current) {
-          onDecrement(e, task, nextVal);
+          onDecrement(task, localValRef.current);
         }
-      }, 150);
+      }, 200);
     };
 
     return (
       <div
         id={`task-row-${task.taskId}`}
-        className={`relative rounded-2xl border transition-all duration-150 p-3.5 sm:p-4 touch-manipulation ${
+        className={`relative rounded-2xl border transition-colors duration-150 p-3.5 sm:p-4 touch-manipulation ${
           localCompleted
             ? 'bg-[#F4F0E8]/85 dark:bg-[#1E1D1B]/90 border-[#DDD7CD] dark:border-[#33302D]'
             : 'bg-white dark:bg-[#1A1918] border-[#E8E3DA] dark:border-[#282725] shadow-xs hover:border-[#D0C9BE] dark:hover:border-[#3A3835]'
@@ -160,16 +177,16 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
         <div className="flex items-start justify-between gap-2.5 sm:gap-3">
           {/* Left Group: Checkbox + Category Icon + Title */}
           <div className="flex items-start gap-2.5 sm:gap-3.5 flex-1 min-w-0">
-            {/* Touch-optimized 44x44px Checkbox Area with instant visual feedback */}
+            {/* Touch-optimized 48x48px Checkbox Area with instant visual feedback */}
             <button
               type="button"
               onClick={handleCheckboxClick}
               id={`task-toggle-${task.taskId}`}
-              className="min-w-[44px] min-h-[44px] -ml-2 -mt-1 p-2 flex items-center justify-center rounded-xl cursor-pointer group shrink-0 touch-manipulation"
+              className="min-w-[48px] min-h-[48px] -ml-2.5 -mt-2 p-2.5 flex items-center justify-center rounded-xl cursor-pointer group shrink-0 touch-manipulation active:scale-90 transition-transform duration-75"
               aria-label={`Mark ${task.title} as ${localCompleted ? 'incomplete' : 'completed'}`}
             >
               <div
-                className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all duration-75 transform active:scale-80 ${
+                className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all duration-100 transform ${
                   localCompleted
                     ? 'bg-[#1A1A1A] dark:bg-[#F3EFEA] text-[#FAF8F5] dark:text-[#121212] shadow-xs scale-100 ring-2 ring-[#1A1A1A] dark:ring-[#F3EFEA]'
                     : 'border-2 border-[#C8C2B7] dark:border-[#4A4744] group-hover:border-[#1A1A1A] dark:group-hover:border-[#F3EFEA] text-transparent bg-transparent'
@@ -312,13 +329,13 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
               <button
                 type="button"
                 onClick={handleStepDecrement}
-                className="w-8 h-8 flex items-center justify-center text-[#57534E] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded-lg hover:bg-white dark:hover:bg-[#1A1918] active:scale-80 active:bg-white/80 transition-transform cursor-pointer touch-manipulation select-none"
+                className="w-8 h-8 flex items-center justify-center text-[#57534E] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded-lg hover:bg-white dark:hover:bg-[#1A1918] active:scale-75 active:bg-white/90 dark:active:bg-[#1A1918] transition-transform duration-75 cursor-pointer touch-manipulation select-none"
                 aria-label="Decrease value"
               >
                 <Minus className="w-3.5 h-3.5 stroke-[2.5]" />
               </button>
 
-              <span className="px-2.5 font-bold text-[#1A1A1A] dark:text-[#F3EFEA] min-w-[50px] text-center select-none">
+              <span className="px-2.5 font-bold text-[#1A1A1A] dark:text-[#F3EFEA] min-w-[50px] text-center select-none tabular-nums">
                 {localVal}
                 {task.targetUnit ? ` ${task.targetUnit}` : ''}
               </span>
@@ -326,7 +343,7 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
               <button
                 type="button"
                 onClick={handleStepIncrement}
-                className="w-8 h-8 flex items-center justify-center text-[#57534E] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded-lg hover:bg-white dark:hover:bg-[#1A1918] active:scale-80 active:bg-white/80 transition-transform cursor-pointer touch-manipulation select-none"
+                className="w-8 h-8 flex items-center justify-center text-[#57534E] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded-lg hover:bg-white dark:hover:bg-[#1A1918] active:scale-75 active:bg-white/90 dark:active:bg-[#1A1918] transition-transform duration-75 cursor-pointer touch-manipulation select-none"
                 aria-label="Increase value"
               >
                 <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -367,17 +384,16 @@ export const TodayTaskList: React.FC<TodayTaskListProps> = React.memo(({ onEditT
   );
 
   const handleToggle = useCallback(
-    (taskId: string, currentCompleted: boolean) => {
-      const nextCompleted = !currentCompleted;
-      toggleTaskCompletion(taskId, todayDateStr, nextCompleted);
+    (taskId: string, targetCompleted: boolean) => {
+      toggleTaskCompletion(taskId, todayDateStr, targetCompleted);
 
-      // Trigger soft celebratory confetti asynchronously
-      if (nextCompleted) {
+      // Trigger soft celebratory confetti asynchronously without blocking frame
+      if (targetCompleted) {
         requestAnimationFrame(() => {
           try {
             confetti({
-              particleCount: 35,
-              spread: 55,
+              particleCount: 28,
+              spread: 50,
               origin: { y: 0.8 },
               colors: ['#6366f1', '#10b981', '#f59e0b', '#ec4899'],
               disableForReducedMotion: true,
@@ -392,14 +408,14 @@ export const TodayTaskList: React.FC<TodayTaskListProps> = React.memo(({ onEditT
   );
 
   const handleIncrement = useCallback(
-    (e: React.MouseEvent, task: Task, nextVal: number) => {
+    (task: Task, nextVal: number) => {
       updateTaskActualValue(task.taskId, todayDateStr, nextVal);
     },
     [updateTaskActualValue, todayDateStr]
   );
 
   const handleDecrement = useCallback(
-    (e: React.MouseEvent, task: Task, nextVal: number) => {
+    (task: Task, nextVal: number) => {
       updateTaskActualValue(task.taskId, todayDateStr, nextVal);
     },
     [updateTaskActualValue, todayDateStr]

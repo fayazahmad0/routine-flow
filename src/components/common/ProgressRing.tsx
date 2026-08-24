@@ -41,19 +41,21 @@ export const ProgressRing: React.FC<ProgressRingProps> = ({
           fill="transparent"
           className="text-[#EAE4D9] dark:text-[#282725]"
         />
-        {/* Animated Progress bar */}
-        <motion.circle
+        {/* Hardware-accelerated CSS transition progress circle */}
+        <circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
           stroke="currentColor"
           strokeWidth={strokeWidth}
           strokeDasharray={circumference}
-          initial={{ strokeDashoffset: circumference }}
-          animate={{ strokeDashoffset }}
-          transition={{ duration: 0.25, ease: 'easeOut' }}
+          strokeDashoffset={strokeDashoffset}
           strokeLinecap="round"
           fill="transparent"
+          style={{
+            transition: 'stroke-dashoffset 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+            willChange: 'stroke-dashoffset',
+          }}
           className={
             clampedPercentage === 100
               ? 'text-[#2D5A43] dark:text-[#68B087]'

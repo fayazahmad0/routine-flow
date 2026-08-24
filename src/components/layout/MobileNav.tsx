@@ -35,7 +35,7 @@ export const MobileNav: React.FC<MobileNavProps> = React.memo(({
   ];
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#FAF8F5]/98 dark:bg-[#161616]/98 backdrop-blur-lg border-t border-[#E8E3DA] dark:border-[#282725] px-3 pt-1.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-colors shadow-lg">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#FAF8F5] dark:bg-[#161616] border-t border-[#E8E3DA] dark:border-[#282725] px-3 pt-1.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-colors shadow-lg">
       <div className="flex items-center justify-between max-w-md mx-auto">
         {navButtons.map((item, index) => {
           const Icon = item.icon;

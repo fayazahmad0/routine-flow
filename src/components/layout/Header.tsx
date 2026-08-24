@@ -54,7 +54,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({ onOpenAddTask, onSele
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-[#FAF8F5]/90 dark:bg-[#161616]/90 backdrop-blur-md border-b border-[#E8E3DA] dark:border-[#282725] px-4 sm:px-6 lg:px-8 py-3.5 transition-colors">
+    <header className="sticky top-0 z-30 bg-[#FAF8F5] dark:bg-[#161616] md:bg-[#FAF8F5]/90 md:dark:bg-[#161616]/90 md:backdrop-blur-md border-b border-[#E8E3DA] dark:border-[#282725] px-4 sm:px-6 lg:px-8 py-3.5 transition-colors">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
         {/* Left: Greeting & Date */}
         <div>
