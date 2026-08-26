@@ -124,7 +124,7 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
   const [dailyRecords, setDailyRecords] = useState<DailyRecord[]>([]);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [toastMessage, setToastMessage] = useState<{ text: string; type?: 'success' | 'info' | 'error' } | null>(null);
 
@@ -178,8 +178,24 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
 
     const uid = user.uid;
+    setLoading(true);
 
-    // 1. Categories (non-blocking snapshot)
+    let initialCategoriesLoaded = false;
+    let initialTasksLoaded = false;
+    let initialCompletionsLoaded = false;
+
+    const checkInitialLoadComplete = () => {
+      if (initialCategoriesLoaded && initialTasksLoaded && initialCompletionsLoaded) {
+        setLoading(false);
+      }
+    };
+
+    // Safety fallback timer to ensure UI never hangs if network is slow
+    const loadSafetyTimer = setTimeout(() => {
+      setLoading(false);
+    }, 2500);
+
+    // 1. Categories
     const categoriesRef = collection(db, `users/${uid}/categories`);
     const unsubCategories = onSnapshot(
       categoriesRef,
@@ -202,9 +218,13 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
         } else {
           setCategories(snap.docs.map((d) => d.data() as Category));
         }
+        initialCategoriesLoaded = true;
+        checkInitialLoadComplete();
       },
       (err) => {
         console.warn('Categories sync notice:', err);
+        initialCategoriesLoaded = true;
+        checkInitialLoadComplete();
       }
     );
 
@@ -214,11 +234,13 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
       tasksRef,
       (snap) => {
         setTasks(snap.docs.map((d) => d.data() as Task));
-        setLoading(false);
+        initialTasksLoaded = true;
+        checkInitialLoadComplete();
       },
       (err) => {
         console.warn('Tasks sync notice:', err);
-        setLoading(false);
+        initialTasksLoaded = true;
+        checkInitialLoadComplete();
       }
     );
 
@@ -244,9 +266,13 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
           return Array.from(map.values());
         });
+        initialCompletionsLoaded = true;
+        checkInitialLoadComplete();
       },
       (err) => {
         console.warn('Completions sync notice:', err);
+        initialCompletionsLoaded = true;
+        checkInitialLoadComplete();
       }
     );
 
@@ -275,6 +301,7 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
 
     return () => {
+      clearTimeout(loadSafetyTimer);
       unsubCategories();
       unsubTasks();
       unsubCompletions();

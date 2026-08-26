@@ -131,53 +131,81 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       clearTimeout(authTimeout);
-      setUser(currentUser);
 
       if (currentUser) {
-        // Construct instant optimistic user profile from auth token so UI renders at 0ms
-        const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-        const instantProfile: UserProfile = {
-          uid: currentUser.uid,
-          displayName: currentUser.displayName || currentUser.phoneNumber || 'Routine Flow User',
-          email: currentUser.email || null,
-          phoneNumber: currentUser.phoneNumber || null,
-          photoURL: currentUser.photoURL || null,
-          createdAt: new Date().toISOString(),
-          timezone: detectedTz,
-          theme: 'system',
-          weekStartsOn: 'monday',
-          onboardingCompleted: false,
-          selectedGoals: ['Productivity', 'Health'],
-          notificationsEnabled: false,
-        };
-
-        setUserProfile((prev) => prev || instantProfile);
-        // CRITICAL: Unblock UI shell immediately without waiting for Firestore network trip
-        setLoading(false);
-
-        // Progressively synchronize user profile document from Firestore in the background
+        setUser(currentUser);
         const userDocRef = doc(db, 'users', currentUser.uid);
+
+        if (unsubscribeProfile) {
+          unsubscribeProfile();
+          unsubscribeProfile = undefined;
+        }
+
         try {
           unsubscribeProfile = onSnapshot(
             userDocRef,
             (snapshot) => {
               if (snapshot.exists()) {
-                setUserProfile(snapshot.data() as UserProfile);
+                const cloudProfile = snapshot.data() as UserProfile;
+                setUserProfile(cloudProfile);
+                setLoading(false);
               } else {
-                // Initialize default profile document asynchronously in background
-                setDoc(userDocRef, instantProfile).catch((writeErr) => {
-                  console.warn('Initial profile doc creation pending/deferred:', writeErr);
+                // Document does not exist in Firestore yet -> truly a brand new user
+                const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+                const initialNewProfile: UserProfile = {
+                  uid: currentUser.uid,
+                  displayName: currentUser.displayName || currentUser.phoneNumber || 'Friend',
+                  email: currentUser.email || null,
+                  phoneNumber: currentUser.phoneNumber || null,
+                  photoURL: currentUser.photoURL || null,
+                  createdAt: new Date().toISOString(),
+                  timezone: detectedTz,
+                  theme: 'system',
+                  weekStartsOn: 'monday',
+                  onboardingCompleted: false,
+                  selectedGoals: ['Productivity', 'Health'],
+                  notificationsEnabled: false,
+                };
+
+                setUserProfile(initialNewProfile);
+                setLoading(false);
+
+                // Write initial new user profile doc
+                setDoc(userDocRef, initialNewProfile).catch((writeErr) => {
+                  console.warn('Initial user profile doc creation notice:', writeErr);
                 });
               }
             },
             (err) => {
               console.warn('User profile snapshot fallback active:', err);
+              // Fallback to basic profile so UI does not hang
+              setUserProfile((prev) => prev || {
+                uid: currentUser.uid,
+                displayName: currentUser.displayName || currentUser.phoneNumber || 'Friend',
+                email: currentUser.email || null,
+                phoneNumber: currentUser.phoneNumber || null,
+                photoURL: currentUser.photoURL || null,
+                createdAt: new Date().toISOString(),
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+                theme: 'system',
+                weekStartsOn: 'monday',
+                onboardingCompleted: true,
+                selectedGoals: ['Productivity', 'Health'],
+                notificationsEnabled: false,
+              });
+              setLoading(false);
             }
           );
         } catch (err) {
-          console.warn('Profile listener initialization notice:', err);
+          console.warn('Profile listener initialization error:', err);
+          setLoading(false);
         }
       } else {
+        if (unsubscribeProfile) {
+          unsubscribeProfile();
+          unsubscribeProfile = undefined;
+        }
+        setUser(null);
         setUserProfile(null);
         setLoading(false);
       }

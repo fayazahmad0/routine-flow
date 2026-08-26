@@ -399,6 +399,7 @@ export const TodayTaskList: React.FC<TodayTaskListProps> = React.memo(({ onEditT
   const {
     todayTasks,
     todayDateStr,
+    loading: routineLoading,
     toggleTaskCompletion,
     updateTaskActualValue,
     archiveTask,
@@ -449,6 +450,32 @@ export const TodayTaskList: React.FC<TodayTaskListProps> = React.memo(({ onEditT
   const handleToggleMenu = useCallback((taskId: string) => {
     setActiveMenuTaskId((prev) => (prev === taskId ? null : taskId));
   }, []);
+
+  if (routineLoading) {
+    return (
+      <div className="space-y-3.5 animate-pulse">
+        <div className="flex items-center justify-between px-1 border-b border-[#E8E3DA] dark:border-[#282725] pb-2">
+          <div className="h-5 w-24 bg-[#EAE4D9] dark:bg-[#282725] rounded" />
+          <div className="h-4 w-28 bg-[#EAE4D9] dark:bg-[#282725] rounded" />
+        </div>
+        <div className="space-y-2.5">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="h-20 bg-white dark:bg-[#1A1918] rounded-2xl border border-[#E8E3DA] dark:border-[#282725] p-4 flex items-center gap-3"
+            >
+              <div className="w-7 h-7 rounded-xl bg-[#EAE4D9] dark:bg-[#282725]" />
+              <div className="w-9 h-9 rounded-xl bg-[#EAE4D9] dark:bg-[#282725]" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 w-36 bg-[#EAE4D9] dark:bg-[#282725] rounded" />
+                <div className="h-3 w-20 bg-[#EAE4D9] dark:bg-[#282725] rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (todayTasks.length === 0) {
     return (

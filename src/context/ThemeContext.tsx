@@ -6,7 +6,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { ThemePreference } from '../types';
 import { auth, db } from '../lib/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 
 interface ThemeContextType {
@@ -19,7 +19,7 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setThemeState] = useState<ThemePreference>(() => {
-    const saved = localStorage.getItem('routineflow_theme') as ThemePreference;
+    const saved = typeof window !== 'undefined' ? (localStorage.getItem('routineflow_theme') as ThemePreference) : null;
     return saved || 'system';
   });
 
@@ -66,26 +66,49 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => mediaQuery.removeEventListener('change', listener);
   }, [theme]);
 
-  // Sync theme with user's profile in Firestore when auth is ready
+  // Real-time synchronization of theme across devices via Firestore user document
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    let unsubProfile: (() => void) | undefined;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
+        const userDocRef = doc(db, 'users', currentUser.uid);
+        if (unsubProfile) {
+          unsubProfile();
+        }
         try {
-          const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            if (data.theme && (data.theme === 'light' || data.theme === 'dark' || data.theme === 'system')) {
-              setThemeState(data.theme);
-              localStorage.setItem('routineflow_theme', data.theme);
+          unsubProfile = onSnapshot(
+            userDocRef,
+            (docSnap) => {
+              if (docSnap.exists()) {
+                const data = docSnap.data();
+                if (data.theme && (data.theme === 'light' || data.theme === 'dark' || data.theme === 'system')) {
+                  setThemeState(data.theme);
+                  localStorage.setItem('routineflow_theme', data.theme);
+                }
+              }
+            },
+            (err) => {
+              console.warn('Theme Firestore sync notice:', err);
             }
-          }
+          );
         } catch (e) {
-          // Graceful fallback
+          console.warn('Theme onSnapshot init notice:', e);
+        }
+      } else {
+        if (unsubProfile) {
+          unsubProfile();
+          unsubProfile = undefined;
         }
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      if (unsubProfile) {
+        unsubProfile();
+      }
+    };
   }, []);
 
   const setTheme = (newTheme: ThemePreference) => {
@@ -95,9 +118,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Persist to user's profile in Firestore if signed in
     const currentUser = auth.currentUser;
     if (currentUser) {
-      updateDoc(doc(db, 'users', currentUser.uid), {
-        theme: newTheme,
-      }).catch((e) => {
+      setDoc(
+        doc(db, 'users', currentUser.uid),
+        { theme: newTheme },
+        { merge: true }
+      ).catch((e) => {
         console.warn('Cloud theme update pending/deferred:', e);
       });
     }

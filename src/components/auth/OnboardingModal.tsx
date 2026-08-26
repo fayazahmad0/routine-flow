@@ -32,8 +32,8 @@ const GOAL_OPTIONS = [
 ];
 
 export const OnboardingModal: React.FC = () => {
-  const { userProfile, user, updateUserProfile } = useAuth();
-  const { createStarterRoutine, showToast } = useRoutine();
+  const { userProfile, user, updateUserProfile, loading: authLoading } = useAuth();
+  const { tasks, createStarterRoutine, showToast, loading: routineLoading } = useRoutine();
 
   const [step, setStep] = useState<number>(1);
   const [selectedGoals, setSelectedGoals] = useState<string[]>(['Study', 'Fitness', 'Sleep']);
@@ -44,8 +44,8 @@ export const OnboardingModal: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isDismissed, setIsDismissed] = useState<boolean>(false);
 
-  // If user already completed onboarding, do not render
-  if (userProfile?.onboardingCompleted || isDismissed) {
+  // If still resolving auth/routine data, or if user already completed onboarding, or if user already has tasks, do not render
+  if (authLoading || routineLoading || !userProfile || userProfile.onboardingCompleted || tasks.length > 0 || isDismissed) {
     return null;
   }
 
