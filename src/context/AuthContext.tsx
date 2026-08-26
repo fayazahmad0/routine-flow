@@ -62,11 +62,45 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const getCachedProfile = (uid: string): UserProfile | null => {
+  try {
+    const raw = localStorage.getItem(`routineflow_profile_${uid}`);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch {}
+  return null;
+};
+
+const saveCachedProfile = (uid: string, profile: UserProfile | null) => {
+  try {
+    if (profile) {
+      localStorage.setItem(`routineflow_profile_${uid}`, JSON.stringify(profile));
+    } else {
+      localStorage.removeItem(`routineflow_profile_${uid}`);
+    }
+  } catch {}
+};
+
+// Global startup performance diagnostic tracker
+export const startupProfiler = {
+  t0: performance.now(),
+  mark(event: string) {
+    const elapsed = (performance.now() - this.t0).toFixed(1);
+    console.log(`[RoutineFlow Startup] ${event} (T+${elapsed}ms)`);
+  },
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const initialUser = auth.currentUser;
+  const initialCachedProfile = initialUser ? getCachedProfile(initialUser.uid) : null;
+
   const [user, setUser] = useState<FirebaseUser | null>(initialUser);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(initialCachedProfile);
+  // If we already have initialUser and a cached profile with onboarding complete, unblock immediately!
+  const [loading, setLoading] = useState<boolean>(
+    !initialUser || !initialCachedProfile || initialCachedProfile.onboardingCompleted === undefined
+  );
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,8 +111,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Test connection on boot
   useEffect(() => {
+    startupProfiler.mark('App bootstrap started');
     testFirebaseConnection().then((connected) => {
       setIsFirebaseConnected(connected);
+      startupProfiler.mark(`Firebase connection verified (connected=${connected})`);
     });
   }, []);
 
@@ -87,8 +123,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     getRedirectResult(auth)
       .then((result) => {
         if (result?.user) {
-          console.log('[RoutineFlow Auth] Successfully authenticated via redirect:', result.user.uid);
+          startupProfiler.mark(`Google Redirect Sign-In success for UID: ${result.user.uid}`);
           setUser(result.user);
+          const cached = getCachedProfile(result.user.uid);
+          if (cached) {
+            setUserProfile(cached);
+            setLoading(false);
+          }
         }
       })
       .catch((err: any) => {
@@ -97,46 +138,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
   }, []);
 
-  // Listen to Auth State and resolve canonical profile before unblocking UI
+  // Listen to Auth State and resolve canonical profile
   useEffect(() => {
     let unsubscribeProfile: (() => void) | undefined;
     let isCancelled = false;
 
-    // Fallback safety timer in case Firebase auth takes unusually long to determine state
+    // Fast fallback safety timer to ensure UI never hangs
     const authTimeout = setTimeout(() => {
       if (isCancelled) return;
       setLoading((prevLoading) => {
         if (prevLoading) {
-          console.warn('[RoutineFlow Auth] Auth state resolution reached timeout fallback; unblocking UI shell.');
+          startupProfiler.mark('Auth state resolution reached timeout fallback; unblocking UI');
           const current = auth.currentUser;
           if (current) {
             setUser(current);
-            setUserProfile((prev) => prev || {
-              uid: current.uid,
-              displayName: current.displayName || current.phoneNumber || 'Routine Flow User',
-              email: current.email || null,
-              phoneNumber: current.phoneNumber || null,
-              photoURL: current.photoURL || null,
-              createdAt: new Date().toISOString(),
-              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-              theme: 'system',
-              weekStartsOn: 'monday',
-              onboardingCompleted: true,
-              selectedGoals: ['Productivity', 'Health'],
-              notificationsEnabled: false,
+            setUserProfile((prev) => {
+              const fallback = prev || {
+                uid: current.uid,
+                displayName: current.displayName || current.phoneNumber || 'Routine Flow User',
+                email: current.email || null,
+                phoneNumber: current.phoneNumber || null,
+                photoURL: current.photoURL || null,
+                createdAt: new Date().toISOString(),
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+                theme: 'system',
+                weekStartsOn: 'monday',
+                onboardingCompleted: true,
+                selectedGoals: ['Productivity', 'Health'],
+                notificationsEnabled: false,
+              };
+              saveCachedProfile(current.uid, fallback);
+              return fallback;
             });
           }
           return false;
         }
         return false;
       });
-    }, 2800);
+    }, 1800);
 
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       if (isCancelled) return;
 
       if (currentUser) {
+        startupProfiler.mark(`Firebase Auth resolved: User UID available (${currentUser.uid})`);
         setUser(currentUser);
+
+        // Check local cache immediately for zero-delay UI unblock
+        const localCached = getCachedProfile(currentUser.uid);
+        if (localCached && localCached.onboardingCompleted !== undefined) {
+          startupProfiler.mark('Loaded critical user profile from fast local cache');
+          setUserProfile(localCached);
+          setLoading(false);
+        }
 
         const userDocRef = doc(db, 'users', currentUser.uid);
 
@@ -146,6 +200,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         try {
+          startupProfiler.mark('User profile cloud snapshot request started');
           unsubscribeProfile = onSnapshot(
             userDocRef,
             (snapshot) => {
@@ -153,11 +208,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               clearTimeout(authTimeout);
 
               if (snapshot.exists()) {
+                startupProfiler.mark('User profile resolved from Firestore snapshot');
                 const cloudProfile = snapshot.data() as UserProfile;
-                // Check canonical onboarding status:
-                // If explicitly true -> true
-                // If explicitly false -> false
-                // If undefined: if doc already exists from earlier sessions, default to true and persist
                 const isCompleted = cloudProfile.onboardingCompleted === true ||
                   (cloudProfile.onboardingCompleted !== false && Boolean(cloudProfile.createdAt || cloudProfile.displayName));
 
@@ -167,15 +219,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   onboardingCompleted: isCompleted,
                 };
 
+                saveCachedProfile(currentUser.uid, resolvedProfile);
+                setUserProfile(resolvedProfile);
+                setLoading(false);
+
                 // Backfill onboardingCompleted flag in Firestore if missing
                 if (cloudProfile.onboardingCompleted === undefined) {
                   setDoc(userDocRef, { onboardingCompleted: isCompleted }, { merge: true }).catch(() => {});
                 }
-
-                setUserProfile(resolvedProfile);
-                setLoading(false);
               } else {
-                // Document does not exist in Firestore yet -> truly a brand new user
+                startupProfiler.mark('User profile doc does not exist in Firestore (New user detected)');
+                // Document does not exist in Firestore yet -> check if local cache had completion
+                const local = getCachedProfile(currentUser.uid);
                 const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
                 const initialNewProfile: UserProfile = {
                   uid: currentUser.uid,
@@ -187,15 +242,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   timezone: detectedTz,
                   theme: 'system',
                   weekStartsOn: 'monday',
-                  onboardingCompleted: false,
+                  onboardingCompleted: local ? local.onboardingCompleted : false,
                   selectedGoals: ['Productivity', 'Health'],
                   notificationsEnabled: false,
                 };
 
+                saveCachedProfile(currentUser.uid, initialNewProfile);
                 setUserProfile(initialNewProfile);
                 setLoading(false);
 
-                // Write canonical initial new user profile doc
+                // Non-blocking background initial profile creation
                 setDoc(userDocRef, initialNewProfile, { merge: true }).catch((writeErr) => {
                   console.warn('[RoutineFlow Auth] Initial user profile doc creation notice:', writeErr);
                 });
@@ -204,9 +260,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             (err) => {
               if (isCancelled) return;
               clearTimeout(authTimeout);
-              console.warn('[RoutineFlow Auth] User profile snapshot listener error / offline mode:', err);
+              startupProfiler.mark(`User profile snapshot offline/fallback: ${err.message}`);
               // Fallback to avoid blocking user
-              setUserProfile((prev) => prev || {
+              const cached = getCachedProfile(currentUser.uid);
+              const fallbackProfile: UserProfile = cached || {
                 uid: currentUser.uid,
                 displayName: currentUser.displayName || 'Friend',
                 email: currentUser.email || null,
@@ -219,7 +276,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 onboardingCompleted: true,
                 selectedGoals: ['Productivity', 'Health'],
                 notificationsEnabled: false,
-              });
+              };
+              saveCachedProfile(currentUser.uid, fallbackProfile);
+              setUserProfile(fallbackProfile);
               setLoading(false);
             }
           );
@@ -235,6 +294,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           unsubscribeProfile();
           unsubscribeProfile = undefined;
         }
+        startupProfiler.mark('Firebase Auth resolved: No user logged in');
         setUser(null);
         setUserProfile(null);
         setLoading(false);
@@ -294,13 +354,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signInWithGoogle = async (useRedirect: boolean = false) => {
     try {
       setError(null);
-      setLoading(true);
+      startupProfiler.mark('Google Sign-In initiated');
       console.log('[RoutineFlow Auth] Initiating Google Sign-In on hostname:', window.location.hostname);
 
       if (useRedirect) {
         await signInWithRedirect(auth, googleProvider);
       } else {
-        await signInWithPopup(auth, googleProvider);
+        const result = await signInWithPopup(auth, googleProvider);
+        if (result?.user) {
+          startupProfiler.mark(`Google popup sign-in completed for UID: ${result.user.uid}`);
+          setUser(result.user);
+          const cached = getCachedProfile(result.user.uid);
+          if (cached && cached.onboardingCompleted !== undefined) {
+            startupProfiler.mark('Instant UI unblock via cached user profile');
+            setUserProfile(cached);
+            setLoading(false);
+          }
+        }
       }
     } catch (err: any) {
       mapGoogleAuthError(err);
@@ -493,23 +563,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const userDocRef = doc(db, 'users', user.uid);
     // Optimistically update local profile state immediately
     setUserProfile((prev) => {
-      if (prev) return { ...prev, ...updates };
-      const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-      return {
-        uid: user.uid,
-        displayName: user.displayName || user.phoneNumber || 'Routine Flow User',
-        email: user.email || null,
-        phoneNumber: user.phoneNumber || null,
-        photoURL: user.photoURL || null,
-        createdAt: new Date().toISOString(),
-        timezone: detectedTz,
-        theme: 'system',
-        weekStartsOn: 'monday',
-        onboardingCompleted: true,
-        selectedGoals: ['Productivity', 'Health'],
-        notificationsEnabled: false,
-        ...updates,
-      };
+      const nextProfile: UserProfile = prev
+        ? { ...prev, ...updates }
+        : {
+            uid: user.uid,
+            displayName: user.displayName || user.phoneNumber || 'Routine Flow User',
+            email: user.email || null,
+            phoneNumber: user.phoneNumber || null,
+            photoURL: user.photoURL || null,
+            createdAt: new Date().toISOString(),
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+            theme: 'system',
+            weekStartsOn: 'monday',
+            onboardingCompleted: true,
+            selectedGoals: ['Productivity', 'Health'],
+            notificationsEnabled: false,
+            ...updates,
+          };
+      saveCachedProfile(user.uid, nextProfile);
+      return nextProfile;
     });
 
     try {

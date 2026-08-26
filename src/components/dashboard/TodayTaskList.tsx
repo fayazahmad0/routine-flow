@@ -497,7 +497,7 @@ export const TodayTaskList: React.FC<TodayTaskListProps> = memo(({ onEditTask, o
     setActiveMenuTaskId((prev) => (prev === taskId ? null : taskId));
   }, []);
 
-  if (routineLoading) {
+  if (routineLoading && todayTasks.length === 0) {
     return (
       <div className="space-y-3.5 animate-pulse">
         <div className="flex items-center justify-between px-1 border-b border-[#E8E3DA] dark:border-[#282725] pb-2">

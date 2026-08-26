@@ -22,7 +22,7 @@ import {
   onSnapshot,
 } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType, sanitizeForFirestore } from '../lib/firebase';
-import { useAuth } from './AuthContext';
+import { useAuth, startupProfiler } from './AuthContext';
 import {
   Task,
   TaskCompletion,
@@ -34,6 +34,22 @@ import {
   DayPerformance,
   MoodType,
 } from '../types';
+
+const getCachedRoutineData = <T,>(key: string, fallback: T): T => {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch {}
+  return fallback;
+};
+
+const saveCachedRoutineData = (key: string, data: any) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch {}
+};
 import {
   getLocalDateString,
   isTaskScheduledOnDate,
@@ -118,13 +134,19 @@ const RoutineContext = createContext<RoutineContextType | undefined>(undefined);
 
 export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, userProfile } = useAuth();
+  const currentUid = user?.uid || auth.currentUser?.uid || '';
 
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [completions, setCompletions] = useState<TaskCompletion[]>([]);
-  const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
+  const initialCachedTasks = currentUid ? getCachedRoutineData<Task[]>(`routineflow_tasks_${currentUid}`, []) : [];
+  const initialCachedCompletions = currentUid ? getCachedRoutineData<TaskCompletion[]>(`routineflow_completions_${currentUid}`, []) : [];
+  const initialCachedCategories = currentUid ? getCachedRoutineData<Category[]>(`routineflow_categories_${currentUid}`, INITIAL_CATEGORIES) : INITIAL_CATEGORIES;
+
+  const [tasks, setTasks] = useState<Task[]>(initialCachedTasks);
+  const [completions, setCompletions] = useState<TaskCompletion[]>(initialCachedCompletions);
+  const [categories, setCategories] = useState<Category[]>(initialCachedCategories);
   const [dailyRecords, setDailyRecords] = useState<DailyRecord[]>([]);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  // If we already had cached tasks, routine loading is immediately false (0ms wait)!
+  const [loading, setLoading] = useState<boolean>(initialCachedTasks.length === 0 && Boolean(currentUid));
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [toastMessage, setToastMessage] = useState<{ text: string; type?: 'success' | 'info' | 'error' } | null>(null);
 
@@ -178,28 +200,34 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
 
     const uid = user.uid;
-    setLoading(true);
 
-    let initialCategoriesLoaded = false;
-    let initialTasksLoaded = false;
-    let initialCompletionsLoaded = false;
+    // Fast hydrate from local cache if not already done
+    const cachedTasks = getCachedRoutineData<Task[]>(`routineflow_tasks_${uid}`, []);
+    const cachedCompletions = getCachedRoutineData<TaskCompletion[]>(`routineflow_completions_${uid}`, []);
+    const cachedCategories = getCachedRoutineData<Category[]>(`routineflow_categories_${uid}`, INITIAL_CATEGORIES);
 
-    const checkInitialLoadComplete = () => {
-      if (initialCategoriesLoaded && initialTasksLoaded && initialCompletionsLoaded) {
-        setLoading(false);
-      }
-    };
+    if (cachedTasks.length > 0) {
+      setTasks(cachedTasks);
+      setCompletions(cachedCompletions);
+      setCategories(cachedCategories);
+      setLoading(false);
+      startupProfiler.mark(`Routine state hydrated from local cache (${cachedTasks.length} habits) - 0ms wait`);
+    } else {
+      setLoading(true);
+    }
 
-    // Safety fallback timer to ensure UI never hangs if network is slow
+    // Safety fallback timer so UI never hangs if network is slow
     const loadSafetyTimer = setTimeout(() => {
       setLoading(false);
-    }, 2500);
+    }, 1200);
 
-    // 1. Categories
+    // 1. Categories (Background sync)
     const categoriesRef = collection(db, `users/${uid}/categories`);
+    startupProfiler.mark('Categories request started');
     const unsubCategories = onSnapshot(
       categoriesRef,
       (snap) => {
+        startupProfiler.mark('Categories resolved');
         if (snap.empty) {
           const seeded: Category[] = DEFAULT_CATEGORIES.map((def) => ({
             categoryId: def.name.toLowerCase().replace(/\s+/g, '_'),
@@ -211,11 +239,13 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
             createdAt: new Date().toISOString(),
           }));
           setCategories(seeded);
+          saveCachedRoutineData(`routineflow_categories_${uid}`, seeded);
           Promise.allSettled(
             seeded.map((cat) => setDoc(doc(db, `users/${uid}/categories`, cat.categoryId), cat))
           ).catch((err) => console.warn('Categories background seeding notice:', err));
         } else {
           const cloudCats = snap.docs.map((d) => d.data() as Category);
+          saveCachedRoutineData(`routineflow_categories_${uid}`, cloudCats);
           setCategories((prev) => {
             if (prev.length === cloudCats.length) {
               const prevMap = new Map<string, Category>(prev.map((c) => [c.categoryId, c]));
@@ -228,22 +258,21 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
             return cloudCats;
           });
         }
-        initialCategoriesLoaded = true;
-        checkInitialLoadComplete();
       },
       (err) => {
         console.warn('Categories sync notice:', err);
-        initialCategoriesLoaded = true;
-        checkInitialLoadComplete();
       }
     );
 
-    // 2. Tasks
+    // 2. Tasks (CRITICAL - Primary unblocker for dashboard)
     const tasksRef = collection(db, `users/${uid}/tasks`);
+    startupProfiler.mark('Tasks request started');
     const unsubTasks = onSnapshot(
       tasksRef,
       (snap) => {
+        startupProfiler.mark(`Tasks resolved: ${snap.docs.length} tasks from cloud`);
         const cloudTasks = snap.docs.map((d) => d.data() as Task);
+        saveCachedRoutineData(`routineflow_tasks_${uid}`, cloudTasks);
         setTasks((prev) => {
           if (prev.length === cloudTasks.length) {
             const prevMap = new Map<string, Task>(prev.map((t) => [t.taskId, t]));
@@ -263,22 +292,25 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
           }
           return cloudTasks;
         });
-        initialTasksLoaded = true;
-        checkInitialLoadComplete();
+
+        // Unblock dashboard as soon as critical tasks data is ready
+        setLoading(false);
       },
       (err) => {
         console.warn('Tasks sync notice:', err);
-        initialTasksLoaded = true;
-        checkInitialLoadComplete();
+        setLoading(false);
       }
     );
 
-    // 3. Completions (with pending write protection & strict identity preservation)
+    // 3. Completions (CRITICAL for today's state)
     const completionsRef = collection(db, `users/${uid}/taskCompletions`);
+    startupProfiler.mark('Completions request started');
     const unsubCompletions = onSnapshot(
       completionsRef,
       (snap) => {
+        startupProfiler.mark(`Completions resolved: ${snap.docs.length} records`);
         const serverCompletions = snap.docs.map((d) => d.data() as TaskCompletion);
+        saveCachedRoutineData(`routineflow_completions_${uid}`, serverCompletions);
 
         setCompletions((prev) => {
           const map = new Map<string, TaskCompletion>();
@@ -315,21 +347,18 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
           return Array.from(map.values());
         });
-        initialCompletionsLoaded = true;
-        checkInitialLoadComplete();
       },
       (err) => {
         console.warn('Completions sync notice:', err);
-        initialCompletionsLoaded = true;
-        checkInitialLoadComplete();
       }
     );
 
-    // 4. Daily Records
+    // 4. Daily Records (SECONDARY - non-blocking)
     const dailyRef = collection(db, `users/${uid}/dailyRecords`);
     const unsubDaily = onSnapshot(
       dailyRef,
       (snap) => {
+        startupProfiler.mark(`Daily records resolved: ${snap.docs.length} records`);
         const cloudRecords = snap.docs.map((d) => d.data() as DailyRecord);
         setDailyRecords((prev) => {
           if (prev.length === cloudRecords.length) {
@@ -348,11 +377,12 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     );
 
-    // 5. Achievements
+    // 5. Achievements (SECONDARY - non-blocking)
     const achRef = collection(db, `users/${uid}/achievements`);
     const unsubAch = onSnapshot(
       achRef,
       (snap) => {
+        startupProfiler.mark(`Achievements resolved: ${snap.docs.length} records`);
         const cloudAch = snap.docs.map((d) => d.data() as Achievement);
         setAchievements((prev) => {
           if (prev.length === cloudAch.length) {
