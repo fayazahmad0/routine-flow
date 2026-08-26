@@ -201,7 +201,6 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
       categoriesRef,
       (snap) => {
         if (snap.empty) {
-          // Asynchronously seed default categories in background without blocking state
           const seeded: Category[] = DEFAULT_CATEGORIES.map((def) => ({
             categoryId: def.name.toLowerCase().replace(/\s+/g, '_'),
             uid,
@@ -216,7 +215,18 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
             seeded.map((cat) => setDoc(doc(db, `users/${uid}/categories`, cat.categoryId), cat))
           ).catch((err) => console.warn('Categories background seeding notice:', err));
         } else {
-          setCategories(snap.docs.map((d) => d.data() as Category));
+          const cloudCats = snap.docs.map((d) => d.data() as Category);
+          setCategories((prev) => {
+            if (prev.length === cloudCats.length) {
+              const prevMap = new Map<string, Category>(prev.map((c) => [c.categoryId, c]));
+              const isSame = cloudCats.every((c) => {
+                const p = prevMap.get(c.categoryId);
+                return p && p.name === c.name && p.color === c.color && p.icon === c.icon;
+              });
+              if (isSame) return prev;
+            }
+            return cloudCats;
+          });
         }
         initialCategoriesLoaded = true;
         checkInitialLoadComplete();
@@ -233,7 +243,26 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const unsubTasks = onSnapshot(
       tasksRef,
       (snap) => {
-        setTasks(snap.docs.map((d) => d.data() as Task));
+        const cloudTasks = snap.docs.map((d) => d.data() as Task);
+        setTasks((prev) => {
+          if (prev.length === cloudTasks.length) {
+            const prevMap = new Map<string, Task>(prev.map((t) => [t.taskId, t]));
+            const isSame = cloudTasks.every((t) => {
+              const p = prevMap.get(t.taskId);
+              return (
+                p &&
+                p.title === t.title &&
+                p.isActive === t.isActive &&
+                p.isArchived === t.isArchived &&
+                p.targetValue === t.targetValue &&
+                p.targetUnit === t.targetUnit &&
+                p.updatedAt === t.updatedAt
+              );
+            });
+            if (isSame) return prev;
+          }
+          return cloudTasks;
+        });
         initialTasksLoaded = true;
         checkInitialLoadComplete();
       },
@@ -244,14 +273,13 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     );
 
-    // 3. Completions (with pending write protection)
+    // 3. Completions (with pending write protection & strict identity preservation)
     const completionsRef = collection(db, `users/${uid}/taskCompletions`);
     const unsubCompletions = onSnapshot(
       completionsRef,
       (snap) => {
         const serverCompletions = snap.docs.map((d) => d.data() as TaskCompletion);
-        
-        // Merge with pending optimistic updates that have not settled yet
+
         setCompletions((prev) => {
           const map = new Map<string, TaskCompletion>();
           serverCompletions.forEach((c) => map.set(c.completionId, c));
@@ -263,6 +291,27 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
               map.set(completionId, pending.record);
             }
           });
+
+          // Prevent duplicate render cascade: if state is structurally identical, preserve array identity
+          if (prev.length === map.size) {
+            let isIdentical = true;
+            for (let i = 0; i < prev.length; i++) {
+              const prevItem = prev[i];
+              const newItem = map.get(prevItem.completionId);
+              if (
+                !newItem ||
+                newItem.completed !== prevItem.completed ||
+                newItem.actualValue !== prevItem.actualValue ||
+                newItem.updatedAt !== prevItem.updatedAt
+              ) {
+                isIdentical = false;
+                break;
+              }
+            }
+            if (isIdentical) {
+              return prev; // ZERO re-renders on settled network callbacks!
+            }
+          }
 
           return Array.from(map.values());
         });
@@ -281,7 +330,18 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const unsubDaily = onSnapshot(
       dailyRef,
       (snap) => {
-        setDailyRecords(snap.docs.map((d) => d.data() as DailyRecord));
+        const cloudRecords = snap.docs.map((d) => d.data() as DailyRecord);
+        setDailyRecords((prev) => {
+          if (prev.length === cloudRecords.length) {
+            const prevMap = new Map<string, DailyRecord>(prev.map((r) => [r.dateId, r]));
+            const isSame = cloudRecords.every((r) => {
+              const p = prevMap.get(r.dateId);
+              return p && p.mood === r.mood && p.note === r.note && p.updatedAt === r.updatedAt;
+            });
+            if (isSame) return prev;
+          }
+          return cloudRecords;
+        });
       },
       (err) => {
         console.warn('Daily records sync notice:', err);
@@ -293,7 +353,18 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const unsubAch = onSnapshot(
       achRef,
       (snap) => {
-        setAchievements(snap.docs.map((d) => d.data() as Achievement));
+        const cloudAch = snap.docs.map((d) => d.data() as Achievement);
+        setAchievements((prev) => {
+          if (prev.length === cloudAch.length) {
+            const prevMap = new Map<string, Achievement>(prev.map((a) => [a.achievementId, a]));
+            const isSame = cloudAch.every((a) => {
+              const p = prevMap.get(a.achievementId);
+              return p && p.progress === a.progress && p.unlockedAt === a.unlockedAt;
+            });
+            if (isSame) return prev;
+          }
+          return cloudAch;
+        });
       },
       (err) => {
         console.warn('Achievements sync notice:', err);

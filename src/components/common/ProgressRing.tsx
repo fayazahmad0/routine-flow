@@ -15,7 +15,7 @@ interface ProgressRingProps {
   subText?: string;
 }
 
-export const ProgressRing: React.FC<ProgressRingProps> = ({
+export const ProgressRing: React.FC<ProgressRingProps> = React.memo(({
   percentage,
   size = 140,
   strokeWidth = 12,
@@ -81,4 +81,6 @@ export const ProgressRing: React.FC<ProgressRingProps> = ({
       )}
     </div>
   );
-};
+});
+
+ProgressRing.displayName = 'ProgressRing';

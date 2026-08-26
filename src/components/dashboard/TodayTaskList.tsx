@@ -18,7 +18,7 @@ import {
   Trash2,
   Sparkles,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
+import { fireLightweightConfetti } from '../../utils/confettiUtils';
 import { mobilePerfProfiler } from '../../utils/mobilePerfProfiler';
 
 interface TodayTaskRowProps {
@@ -35,367 +35,426 @@ interface TodayTaskRowProps {
   onDeleteTask: (taskId: string) => void;
 }
 
-const TodayTaskRow = memo<TodayTaskRowProps>(
-  ({
-    task,
-    completed,
-    actualValue,
-    category,
-    isMenuOpen,
-    onToggle,
-    onUpdateValue,
-    onToggleMenu,
-    onEditTask,
-    onArchiveTask,
-    onDeleteTask,
-  }) => {
-    const hasStepper = task.type === 'duration' || task.type === 'quantity' || task.type === 'target';
-    const initialVal = actualValue !== undefined ? actualValue : (completed ? (task.targetValue || 1) : 0);
+const areTaskRowPropsEqual = (prev: TodayTaskRowProps, next: TodayTaskRowProps): boolean => {
+  return (
+    prev.task.taskId === next.task.taskId &&
+    prev.task.title === next.task.title &&
+    prev.task.type === next.task.type &&
+    prev.task.targetValue === next.task.targetValue &&
+    prev.task.targetUnit === next.task.targetUnit &&
+    prev.task.reminderTime === next.task.reminderTime &&
+    prev.task.reminderEnabled === next.task.reminderEnabled &&
+    prev.completed === next.completed &&
+    prev.actualValue === next.actualValue &&
+    prev.isMenuOpen === next.isMenuOpen &&
+    prev.category?.categoryId === next.category?.categoryId &&
+    prev.category?.color === next.category?.color &&
+    prev.category?.name === next.category?.name &&
+    prev.onToggle === next.onToggle &&
+    prev.onUpdateValue === next.onUpdateValue &&
+    prev.onToggleMenu === next.onToggleMenu
+  );
+};
 
-    // 1. ISOLATED LOCAL STATE: Drives 0ms instant UI updates without waiting for React Context or Firestore
-    const [localCompleted, setLocalCompleted] = useState<boolean>(completed);
-    const [localVal, setLocalVal] = useState<number>(initialVal);
+const TodayTaskRowComponent: React.FC<TodayTaskRowProps> = ({
+  task,
+  completed,
+  actualValue,
+  category,
+  isMenuOpen,
+  onToggle,
+  onUpdateValue,
+  onToggleMenu,
+  onEditTask,
+  onArchiveTask,
+  onDeleteTask,
+}) => {
+  const hasStepper = task.type === 'duration' || task.type === 'quantity' || task.type === 'target';
+  const initialVal = actualValue !== undefined ? actualValue : (completed ? (task.targetValue || 1) : 0);
 
-    // Refs to track state synchronously during rapid taps & prevent prop clobbering
-    const localValRef = useRef<number>(initialVal);
-    const localCompletedRef = useRef<boolean>(completed);
-    const lastTapTimeRef = useRef<number>(0);
-    const syncDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-    const isMountedRef = useRef<boolean>(true);
+  // 1. ISOLATED LOCAL STATE: Drives 0ms instant UI updates without waiting for React Context or Firestore
+  const [localCompleted, setLocalCompleted] = useState<boolean>(completed);
+  const [localVal, setLocalVal] = useState<number>(initialVal);
 
-    useEffect(() => {
-      isMountedRef.current = true;
-      return () => {
-        isMountedRef.current = false;
-        if (syncDebounceTimerRef.current) {
-          clearTimeout(syncDebounceTimerRef.current);
+  // Refs to track state synchronously during rapid taps & prevent prop clobbering
+  const localValRef = useRef<number>(initialVal);
+  const localCompletedRef = useRef<boolean>(completed);
+  const lastTapTimeRef = useRef<number>(0);
+  const syncDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const checkboxDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isMountedRef = useRef<boolean>(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (syncDebounceTimerRef.current) {
+        clearTimeout(syncDebounceTimerRef.current);
+      }
+      if (checkboxDebounceTimerRef.current) {
+        clearTimeout(checkboxDebounceTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Sync upstream prop changes only when not actively tapping (prevents jump/glitch)
+  useEffect(() => {
+    const timeSinceTap = Date.now() - lastTapTimeRef.current;
+    if (timeSinceTap > 1000) {
+      setLocalCompleted(completed);
+      localCompletedRef.current = completed;
+    }
+  }, [completed]);
+
+  useEffect(() => {
+    const timeSinceTap = Date.now() - lastTapTimeRef.current;
+    if (timeSinceTap > 1000) {
+      const val = actualValue !== undefined ? actualValue : (completed ? (task.targetValue || 1) : 0);
+      setLocalVal(val);
+      localValRef.current = val;
+    }
+  }, [actualValue, completed, task.targetValue]);
+
+  // Schedule background Firestore sync for steppers after rapid tapping settles
+  const scheduleBackgroundSync = useCallback(
+    (finalVal: number) => {
+      if (syncDebounceTimerRef.current) {
+        clearTimeout(syncDebounceTimerRef.current);
+      }
+      syncDebounceTimerRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
+          startTransition(() => {
+            onUpdateValue(task, finalVal);
+          });
         }
-      };
-    }, []);
+      }, 200);
+    },
+    [onUpdateValue, task]
+  );
 
-    // Sync upstream prop changes only when not actively tapping (prevents jump/glitch)
-    useEffect(() => {
-      const timeSinceTap = Date.now() - lastTapTimeRef.current;
-      if (timeSinceTap > 1200) {
-        setLocalCompleted(completed);
-        localCompletedRef.current = completed;
+  // Schedule background Firestore sync for checkboxes to coalesce rapid toggles
+  const scheduleCheckboxSync = useCallback(
+    (targetCompleted: boolean) => {
+      if (checkboxDebounceTimerRef.current) {
+        clearTimeout(checkboxDebounceTimerRef.current);
       }
-    }, [completed]);
-
-    useEffect(() => {
-      const timeSinceTap = Date.now() - lastTapTimeRef.current;
-      if (timeSinceTap > 1200) {
-        const val = actualValue !== undefined ? actualValue : (completed ? (task.targetValue || 1) : 0);
-        setLocalVal(val);
-        localValRef.current = val;
-      }
-    }, [actualValue, completed, task.targetValue]);
-
-    // Schedule background Firestore sync after rapid tapping settles
-    const scheduleBackgroundSync = useCallback(
-      (finalVal: number) => {
-        if (syncDebounceTimerRef.current) {
-          clearTimeout(syncDebounceTimerRef.current);
+      checkboxDebounceTimerRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
+          startTransition(() => {
+            onToggle(task.taskId, targetCompleted);
+          });
         }
-        syncDebounceTimerRef.current = setTimeout(() => {
-          if (isMountedRef.current) {
-            startTransition(() => {
-              onUpdateValue(task, finalVal);
-            });
-          }
-        }, 250);
-      },
-      [onUpdateValue, task]
-    );
+      }, 100);
+    },
+    [onToggle, task.taskId]
+  );
 
-    // ----------------------------------------------------
-    // CHECKBOX TAP HANDLER: 0ms Instant Local Toggle
-    // ----------------------------------------------------
-    const handleCheckboxClick = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      const now = performance.now();
-      lastTapTimeRef.current = Date.now();
-      const interactionId = mobilePerfProfiler.startInteraction('checkbox', task.taskId, now);
+  // ----------------------------------------------------
+  // CHECKBOX TAP HANDLER: 0ms Instant Local Toggle
+  // ----------------------------------------------------
+  const handleCheckboxClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const now = performance.now();
+    lastTapTimeRef.current = Date.now();
+    const interactionId = mobilePerfProfiler.startInteraction('checkbox', task.taskId, now);
 
-      const nextCompleted = !localCompletedRef.current;
-      localCompletedRef.current = nextCompleted;
+    const nextCompleted = !localCompletedRef.current;
+    localCompletedRef.current = nextCompleted;
 
-      // 1. Immediate local state change
-      setLocalCompleted(nextCompleted);
+    // 1. Immediate local state change (0ms visual update)
+    setLocalCompleted(nextCompleted);
 
-      if (hasStepper) {
-        const nextVal = nextCompleted ? (task.targetValue || 1) : 0;
-        localValRef.current = nextVal;
-        setLocalVal(nextVal);
-      }
-
-      mobilePerfProfiler.recordStateUpdate(interactionId);
-      mobilePerfProfiler.finishInteraction(interactionId);
-
-      // 2. Background async sync
-      startTransition(() => {
-        onToggle(task.taskId, nextCompleted);
-      });
-    };
-
-    // ----------------------------------------------------
-    // STEPPER (+) INCREMENT HANDLER: 0ms Instant Local Increment
-    // ----------------------------------------------------
-    const handleStepIncrement = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      const now = performance.now();
-      lastTapTimeRef.current = Date.now();
-      const interactionId = mobilePerfProfiler.startInteraction('plus', task.taskId, now);
-
-      const step = task.type === 'duration' && task.targetUnit?.toLowerCase().includes('min') ? 5 : 1;
-      const nextVal = localValRef.current + step;
+    if (hasStepper) {
+      const nextVal = nextCompleted ? (task.targetValue || 1) : 0;
       localValRef.current = nextVal;
-
-      // 1. Immediate local state change
       setLocalVal(nextVal);
+    }
 
-      const isTargetMet = task.targetValue ? nextVal >= task.targetValue : nextVal > 0;
-      if (isTargetMet !== localCompletedRef.current) {
-        localCompletedRef.current = isTargetMet;
-        setLocalCompleted(isTargetMet);
+    mobilePerfProfiler.recordStateUpdate(interactionId);
+    mobilePerfProfiler.finishInteraction(interactionId);
+
+    // Light celebratory burst if completed
+    if (nextCompleted) {
+      fireLightweightConfetti();
+    }
+
+    // 2. Coalesced background sync
+    scheduleCheckboxSync(nextCompleted);
+  };
+
+  // ----------------------------------------------------
+  // STEPPER (+) INCREMENT HANDLER: 0ms Instant Local Increment
+  // ----------------------------------------------------
+  const handleStepIncrement = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const now = performance.now();
+    lastTapTimeRef.current = Date.now();
+    const interactionId = mobilePerfProfiler.startInteraction('plus', task.taskId, now);
+
+    const step = task.type === 'duration' && task.targetUnit?.toLowerCase().includes('min') ? 5 : 1;
+    const nextVal = localValRef.current + step;
+    localValRef.current = nextVal;
+
+    // 1. Immediate local state change (0ms visual update)
+    setLocalVal(nextVal);
+
+    const isTargetMet = task.targetValue ? nextVal >= task.targetValue : nextVal > 0;
+    if (isTargetMet !== localCompletedRef.current) {
+      localCompletedRef.current = isTargetMet;
+      setLocalCompleted(isTargetMet);
+      if (isTargetMet) {
+        fireLightweightConfetti();
       }
+    }
 
-      mobilePerfProfiler.recordStateUpdate(interactionId);
-      mobilePerfProfiler.finishInteraction(interactionId);
+    mobilePerfProfiler.recordStateUpdate(interactionId);
+    mobilePerfProfiler.finishInteraction(interactionId);
 
-      // 2. Schedule debounced background Firestore persistence (coalesces rapid + + + + +)
-      scheduleBackgroundSync(nextVal);
-    };
+    // 2. Schedule debounced background Firestore persistence (coalesces rapid + + + + +)
+    scheduleBackgroundSync(nextVal);
+  };
 
-    // ----------------------------------------------------
-    // STEPPER (-) DECREMENT HANDLER: 0ms Instant Local Decrement
-    // ----------------------------------------------------
-    const handleStepDecrement = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      const now = performance.now();
-      lastTapTimeRef.current = Date.now();
-      const interactionId = mobilePerfProfiler.startInteraction('minus', task.taskId, now);
+  // ----------------------------------------------------
+  // STEPPER (-) DECREMENT HANDLER: 0ms Instant Local Decrement
+  // ----------------------------------------------------
+  const handleStepDecrement = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const now = performance.now();
+    lastTapTimeRef.current = Date.now();
+    const interactionId = mobilePerfProfiler.startInteraction('minus', task.taskId, now);
 
-      const step = task.type === 'duration' && task.targetUnit?.toLowerCase().includes('min') ? 5 : 1;
-      const nextVal = Math.max(0, localValRef.current - step);
-      localValRef.current = nextVal;
+    const step = task.type === 'duration' && task.targetUnit?.toLowerCase().includes('min') ? 5 : 1;
+    const nextVal = Math.max(0, localValRef.current - step);
+    localValRef.current = nextVal;
 
-      // 1. Immediate local state change
-      setLocalVal(nextVal);
+    // 1. Immediate local state change (0ms visual update)
+    setLocalVal(nextVal);
 
-      const isTargetMet = task.targetValue ? nextVal >= task.targetValue : nextVal > 0;
-      if (isTargetMet !== localCompletedRef.current) {
-        localCompletedRef.current = isTargetMet;
-        setLocalCompleted(isTargetMet);
-      }
+    const isTargetMet = task.targetValue ? nextVal >= task.targetValue : nextVal > 0;
+    if (isTargetMet !== localCompletedRef.current) {
+      localCompletedRef.current = isTargetMet;
+      setLocalCompleted(isTargetMet);
+    }
 
-      mobilePerfProfiler.recordStateUpdate(interactionId);
-      mobilePerfProfiler.finishInteraction(interactionId);
+    mobilePerfProfiler.recordStateUpdate(interactionId);
+    mobilePerfProfiler.finishInteraction(interactionId);
 
-      // 2. Schedule debounced background Firestore persistence (coalesces rapid - - - - -)
-      scheduleBackgroundSync(nextVal);
-    };
+    // 2. Schedule debounced background persistence
+    scheduleBackgroundSync(nextVal);
+  };
 
-    return (
-      <div
-        id={`task-row-${task.taskId}`}
-        className={`relative rounded-2xl border transition-colors duration-150 p-3.5 sm:p-4 touch-manipulation ${
-          localCompleted
-            ? 'bg-[#F4F0E8]/85 dark:bg-[#1E1D1B]/90 border-[#DDD7CD] dark:border-[#33302D]'
-            : 'bg-white dark:bg-[#1A1918] border-[#E8E3DA] dark:border-[#282725] shadow-xs hover:border-[#D0C9BE] dark:hover:border-[#3A3835]'
-        }`}
-      >
-        {/* Main Row: Checkbox + Category Icon + Title + Menu */}
-        <div className="flex items-start justify-between gap-2.5 sm:gap-3">
-          {/* Left Group: Checkbox + Category Icon + Title */}
-          <div className="flex items-start gap-2.5 sm:gap-3.5 flex-1 min-w-0">
-            {/* Touch-optimized 48x48px Checkbox Area with instant visual feedback */}
-            <button
-              type="button"
-              onClick={handleCheckboxClick}
-              id={`task-toggle-${task.taskId}`}
-              className="min-w-[48px] min-h-[48px] -ml-2.5 -mt-2 p-2.5 flex items-center justify-center rounded-xl cursor-pointer group shrink-0 touch-manipulation active:scale-90 transition-transform duration-75"
-              aria-label={`Mark ${task.title} as ${localCompleted ? 'incomplete' : 'completed'}`}
+  // Calculate progress percent for target/duration tasks
+  const progressPercent = task.targetValue
+    ? Math.min(100, Math.round((localVal / task.targetValue) * 100))
+    : localCompleted
+    ? 100
+    : 0;
+
+  return (
+    <div
+      className={`group relative rounded-2xl p-4 sm:p-5 border transition-colors select-none ${
+        localCompleted
+          ? 'bg-[#F2EDE4]/60 dark:bg-[#1E1C1A]/70 border-[#DED7CD] dark:border-[#33302D]'
+          : 'bg-white dark:bg-[#1A1918] border-[#E8E3DA] dark:border-[#282725] hover:border-[#D4CDBC] dark:hover:border-[#383532] shadow-xs'
+      }`}
+      style={{ touchAction: 'manipulation' }}
+    >
+      <div className="flex items-start sm:items-center justify-between gap-3">
+        {/* Left: Custom Tap Checkbox & Task Information */}
+        <div className="flex items-start sm:items-center gap-3.5 flex-1 min-w-0">
+          {/* Custom Checkbox Button (0ms Instant Toggle) */}
+          <button
+            type="button"
+            onClick={handleCheckboxClick}
+            aria-label={localCompleted ? `Mark ${task.title} incomplete` : `Mark ${task.title} complete`}
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl border flex items-center justify-center transition-transform cursor-pointer shrink-0 mt-0.5 sm:mt-0 active:scale-90 ${
+              localCompleted
+                ? 'bg-[#2D5A43] border-[#2D5A43] dark:bg-[#68B087] dark:border-[#68B087] text-white dark:text-[#121212] shadow-xs'
+                : 'border-[#D4CDBC] dark:border-[#3E3B37] bg-[#FAF8F5] dark:bg-[#22201E] hover:border-[#1A1A1A] dark:hover:border-[#F3EFEA]'
+            }`}
+            style={{ touchAction: 'manipulation' }}
+          >
+            {localCompleted && <Check className="w-4 h-4 sm:w-4.5 sm:h-4.5 stroke-[2.5]" />}
+          </button>
+
+          {/* Category Icon Badge */}
+          {category && (
+            <div
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 border border-black/5 dark:border-white/5"
+              style={{ backgroundColor: `${category.color}15`, color: category.color }}
             >
-              <div
-                className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all duration-100 transform ${
+              <IconRenderer name={category.icon} className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </div>
+          )}
+
+          {/* Task Title and Context Meta */}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h4
+                className={`font-serif text-sm sm:text-base font-semibold leading-tight truncate ${
                   localCompleted
-                    ? 'bg-[#1A1A1A] dark:bg-[#F3EFEA] text-[#FAF8F5] dark:text-[#121212] shadow-xs scale-100 ring-2 ring-[#1A1A1A] dark:ring-[#F3EFEA]'
-                    : 'border-2 border-[#C8C2B7] dark:border-[#4A4744] group-hover:border-[#1A1A1A] dark:group-hover:border-[#F3EFEA] text-transparent bg-transparent'
+                    ? 'line-through text-[#78716C] dark:text-[#8C8780]'
+                    : 'text-[#1A1A1A] dark:text-[#F3EFEA]'
                 }`}
               >
-                <Check
-                  className={`w-4 h-4 stroke-[3] transition-opacity duration-75 ${
-                    localCompleted ? 'opacity-100' : 'opacity-0'
-                  }`}
-                />
-              </div>
-            </button>
-
-            {/* Category icon badge */}
-            <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border border-[#E8E3DA] dark:border-[#2E2C2A] mt-0.5"
-              style={{
-                backgroundColor: category?.color ? `${category.color}18` : '#1A1A1A10',
-                color: category?.color || '#1A1A1A',
-              }}
-            >
-              <IconRenderer name={task.icon || category?.icon || 'CheckSquare'} className="w-4 h-4" />
+                {task.title}
+              </h4>
             </div>
 
-            {/* Task Title & Reminder */}
-            <div
-              className="min-w-0 flex-1 cursor-pointer pt-0.5 touch-manipulation"
-              onClick={handleCheckboxClick}
-            >
-              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                <h4
-                  className={`text-sm sm:text-base font-semibold tracking-tight transition-colors duration-100 leading-snug break-words ${
-                    localCompleted
-                      ? 'text-[#8C8780] dark:text-[#78716C] line-through opacity-80'
-                      : 'text-[#1A1A1A] dark:text-[#F3EFEA]'
-                  }`}
-                >
-                  {task.title}
-                </h4>
+            {/* Target, Unit, & Reminder Meta Badges */}
+            <div className="flex items-center flex-wrap gap-2 mt-1">
+              {category && (
+                <span className="text-[10px] sm:text-[11px] font-medium text-[#78716C] dark:text-[#A39E96]">
+                  {category.name}
+                </span>
+              )}
 
-                {task.reminderEnabled && task.reminderTime && (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-medium bg-[#F2EDE4] dark:bg-[#252422] text-[#57534E] dark:text-[#A39E96] shrink-0 border border-[#E2DDD5] dark:border-[#353330]">
-                    <Clock className="w-3 h-3 text-[#A04000] dark:text-[#E08A50]" />
-                    {task.reminderTime}
+              {task.targetValue && (
+                <span className="text-[10px] sm:text-[11px] font-mono text-[#78716C] dark:text-[#A39E96]">
+                  • Goal: {task.targetValue} {task.targetUnit || ''}
+                </span>
+              )}
+
+              {task.reminderEnabled && task.reminderTime && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-mono text-[#78716C] dark:text-[#A39E96] bg-[#F2EDE4] dark:bg-[#252422] px-1.5 py-0.5 rounded border border-[#E2DDD5] dark:border-[#353330]">
+                  <Clock className="w-2.5 h-2.5" />
+                  {task.reminderTime}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Stepper Controls (+ / -) & Context Options Menu */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Stepper for Quantity / Duration / Target Tasks */}
+          {hasStepper && (
+            <div className="flex items-center bg-[#F2EDE4] dark:bg-[#252422] rounded-xl p-1 border border-[#E2DDD5] dark:border-[#353330]">
+              <button
+                type="button"
+                onClick={handleStepDecrement}
+                disabled={localVal <= 0}
+                aria-label={`Decrease ${task.title}`}
+                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white dark:hover:bg-[#1A1918] active:scale-90 text-[#1A1A1A] dark:text-[#F3EFEA] disabled:opacity-30 disabled:cursor-not-allowed transition-transform cursor-pointer"
+                style={{ touchAction: 'manipulation' }}
+              >
+                <Minus className="w-3.5 h-3.5" />
+              </button>
+
+              <div className="px-2.5 text-center min-w-[2.75rem]">
+                <span className="font-mono text-xs sm:text-sm font-bold text-[#1A1A1A] dark:text-[#F3EFEA] tabular-nums">
+                  {localVal}
+                </span>
+                {task.targetUnit && (
+                  <span className="block text-[9px] font-mono text-[#78716C] dark:text-[#8C8780] leading-none">
+                    {task.targetUnit}
                   </span>
                 )}
               </div>
 
-              {task.description && (
-                <p className="text-xs text-[#78716C] dark:text-[#A39E96] mt-0.5 line-clamp-1">
-                  {task.description}
-                </p>
-              )}
+              <button
+                type="button"
+                onClick={handleStepIncrement}
+                aria-label={`Increase ${task.title}`}
+                className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#1A1A1A] dark:bg-[#F3EFEA] text-[#FAF8F5] dark:text-[#121212] hover:opacity-90 active:scale-90 shadow-2xs transition-transform cursor-pointer"
+                style={{ touchAction: 'manipulation' }}
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
             </div>
-          </div>
+          )}
 
-          {/* Right: 3-Dots Menu with touch target */}
-          <div className="relative shrink-0 -mr-1 -mt-1">
+          {/* Context Options Menu Dropdown Trigger */}
+          <div className="relative">
             <button
               type="button"
-              onClick={() => onToggleMenu(task.taskId)}
-              className="min-w-[40px] min-h-[40px] flex items-center justify-center p-2 text-[#78716C] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded-xl hover:bg-[#F2EDE4] dark:hover:bg-[#252422] active:scale-90 transition-all cursor-pointer touch-manipulation"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleMenu(task.taskId);
+              }}
+              className="p-2 rounded-xl text-[#78716C] hover:text-[#1A1A1A] dark:text-[#A39E96] dark:hover:text-[#F3EFEA] hover:bg-[#F2EDE4] dark:hover:bg-[#252422] transition-colors cursor-pointer"
               aria-label="Task options"
             >
               <MoreVertical className="w-4 h-4" />
             </button>
 
-            {/* Dropdown Menu */}
+            {/* Menu Popover */}
             {isMenuOpen && (
-              <div className="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-[#1E1D1B] rounded-2xl shadow-xl border border-[#E8E3DA] dark:border-[#2E2C2A] py-1.5 z-30">
+              <div
+                className="absolute right-0 top-full mt-1.5 w-44 bg-white dark:bg-[#1C1B19] border border-[#E8E3DA] dark:border-[#33302D] rounded-xl shadow-lg z-30 py-1 font-sans text-xs"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <button
                   type="button"
                   onClick={() => {
-                    onToggleMenu(task.taskId);
                     onEditTask(task);
+                    onToggleMenu(task.taskId);
                   }}
-                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs font-semibold text-[#1A1A1A] dark:text-[#F3EFEA] hover:bg-[#F2EDE4] dark:hover:bg-[#252422] text-left cursor-pointer"
+                  className="w-full px-3 py-2 flex items-center gap-2.5 text-[#1A1A1A] dark:text-[#F3EFEA] hover:bg-[#F2EDE4] dark:hover:bg-[#252422] transition-colors cursor-pointer"
                 >
-                  <Edit2 className="w-3.5 h-3.5 text-[#78716C]" />
-                  Edit Routine
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>Edit Habit</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    onToggleMenu(task.taskId);
                     onArchiveTask(task.taskId);
+                    onToggleMenu(task.taskId);
                   }}
-                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs font-semibold text-[#1A1A1A] dark:text-[#F3EFEA] hover:bg-[#F2EDE4] dark:hover:bg-[#252422] text-left cursor-pointer"
+                  className="w-full px-3 py-2 flex items-center gap-2.5 text-[#78716C] dark:text-[#A39E96] hover:bg-[#F2EDE4] dark:hover:bg-[#252422] transition-colors cursor-pointer"
                 >
-                  <Archive className="w-3.5 h-3.5 text-[#78716C]" />
-                  Archive
+                  <Archive className="w-3.5 h-3.5" />
+                  <span>Archive</span>
                 </button>
+                <div className="my-1 border-t border-[#E8E3DA] dark:border-[#2E2C2A]" />
                 <button
                   type="button"
                   onClick={() => {
-                    onToggleMenu(task.taskId);
                     onDeleteTask(task.taskId);
+                    onToggleMenu(task.taskId);
                   }}
-                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs font-semibold text-[#B91C1C] dark:text-[#F87171] hover:bg-[#FEE2E2] dark:hover:bg-[#3E1A1A] text-left cursor-pointer"
+                  className="w-full px-3 py-2 flex items-center gap-2.5 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  Delete
+                  <span>Delete Habit</span>
                 </button>
               </div>
             )}
           </div>
         </div>
-
-        {/* Sub-row: Category Chip + Target Badge + Mobile-Friendly Stepper */}
-        <div className="mt-2.5 pt-2 border-t border-[#EDE7DD] dark:border-[#282725] flex flex-wrap items-center justify-between gap-2 text-xs">
-          {/* Left Metadata Chips */}
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-            {category && (
-              <span
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-mono uppercase tracking-wider font-semibold border"
-                style={{
-                  backgroundColor: category.color ? `${category.color}15` : '#1A1A1A10',
-                  color: category.color || '#1A1A1A',
-                  borderColor: category.color ? `${category.color}35` : '#1A1A1A25',
-                }}
-              >
-                <span
-                  className="w-1.5 h-1.5 rounded-full shrink-0"
-                  style={{ backgroundColor: category.color || '#1A1A1A' }}
-                />
-                {category.name}
-              </span>
-            )}
-
-            {task.targetValue && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#F2EDE4] dark:bg-[#242220] border border-[#E2DDD5] dark:border-[#353330] rounded-lg text-[11px] font-mono text-[#8A4A28] dark:text-[#E08A50] font-semibold">
-                🎯 Target: {task.targetValue} {task.targetUnit || ''}
-              </span>
-            )}
-          </div>
-
-          {/* Right Stepper (for duration/quantity/target tasks) with 0ms tactile response */}
-          {hasStepper && (
-            <div className="flex items-center bg-[#F2EDE4] dark:bg-[#252422] border border-[#DDD7CD] dark:border-[#353330] rounded-xl p-0.5 text-xs font-mono shadow-2xs shrink-0 ml-auto touch-manipulation">
-              <button
-                type="button"
-                onClick={handleStepDecrement}
-                className="w-8 h-8 flex items-center justify-center text-[#57534E] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded-lg hover:bg-white dark:hover:bg-[#1A1918] active:scale-75 active:bg-white/90 dark:active:bg-[#1A1918] transition-transform duration-75 cursor-pointer touch-manipulation select-none"
-                aria-label="Decrease value"
-              >
-                <Minus className="w-3.5 h-3.5 stroke-[2.5]" />
-              </button>
-
-              <span className="px-2.5 font-bold text-[#1A1A1A] dark:text-[#F3EFEA] min-w-[50px] text-center select-none tabular-nums">
-                {localVal}
-                {task.targetUnit ? ` ${task.targetUnit}` : ''}
-              </span>
-
-              <button
-                type="button"
-                onClick={handleStepIncrement}
-                className="w-8 h-8 flex items-center justify-center text-[#57534E] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded-lg hover:bg-white dark:hover:bg-[#1A1918] active:scale-75 active:bg-white/90 dark:active:bg-[#1A1918] transition-transform duration-75 cursor-pointer touch-manipulation select-none"
-                aria-label="Increase value"
-              >
-                <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-              </button>
-            </div>
-          )}
-        </div>
       </div>
-    );
-  }
-);
 
-TodayTaskRow.displayName = 'TodayTaskRow';
+      {/* Target Progress Bar (for duration / quantity habits) */}
+      {task.targetValue && task.targetValue > 1 && (
+        <div className="mt-3 pt-2 border-t border-[#E8E3DA]/60 dark:border-[#282725]">
+          <div className="flex items-center justify-between text-[10px] font-mono text-[#78716C] dark:text-[#A39E96] mb-1">
+            <span>Progress</span>
+            <span className="tabular-nums font-semibold">{progressPercent}%</span>
+          </div>
+          <div className="h-1.5 w-full bg-[#EAE4D9] dark:bg-[#282725] rounded-full overflow-hidden">
+            <div
+              className={`h-full transition-all duration-300 rounded-full ${
+                progressPercent >= 100
+                  ? 'bg-[#2D5A43] dark:bg-[#68B087]'
+                  : 'bg-[#A04000] dark:bg-[#E08A50]'
+              }`}
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const TodayTaskRow = memo(TodayTaskRowComponent, areTaskRowPropsEqual);
 
 interface TodayTaskListProps {
   onEditTask: (task: Task) => void;
   onOpenAddTask: () => void;
 }
 
-export const TodayTaskList: React.FC<TodayTaskListProps> = React.memo(({ onEditTask, onOpenAddTask }) => {
+export const TodayTaskList: React.FC<TodayTaskListProps> = memo(({ onEditTask, onOpenAddTask }) => {
   const {
     todayTasks,
     todayDateStr,
@@ -419,23 +478,6 @@ export const TodayTaskList: React.FC<TodayTaskListProps> = React.memo(({ onEditT
   const handleToggle = useCallback(
     (taskId: string, targetCompleted: boolean) => {
       toggleTaskCompletion(taskId, todayDateStr, targetCompleted);
-
-      // Trigger soft celebratory confetti asynchronously after UI has painted
-      if (targetCompleted) {
-        setTimeout(() => {
-          try {
-            confetti({
-              particleCount: 20,
-              spread: 45,
-              origin: { y: 0.85 },
-              colors: ['#6366f1', '#10b981', '#f59e0b', '#ec4899'],
-              disableForReducedMotion: true,
-            });
-          } catch (e) {
-            // Safe fallback
-          }
-        }, 150);
-      }
     },
     [toggleTaskCompletion, todayDateStr]
   );

@@ -24,6 +24,7 @@ class MobilePerfProfiler {
   private activeInteractions: Map<string, Partial<InteractionMetric>> = new Map();
   private isEnabled: boolean = false;
   private reRenderCounters: Map<string, number> = new Map();
+  private listeners: Set<(metrics: InteractionMetric[]) => void> = new Set();
 
   constructor() {
     // Enable by default in dev or when query param / local storage has ?diagnostics=true
@@ -33,6 +34,21 @@ class MobilePerfProfiler {
         this.isEnabled = true;
       }
       (window as any).__RF_PROFILER__ = this;
+    }
+  }
+
+  public subscribe(listener: (metrics: InteractionMetric[]) => void): () => void {
+    this.listeners.add(listener);
+    listener(this.metrics);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private notifyListeners() {
+    if (this.listeners.size > 0) {
+      const snapshot = [...this.metrics];
+      this.listeners.forEach((l) => l(snapshot));
     }
   }
 
@@ -112,6 +128,7 @@ class MobilePerfProfiler {
         if (this.metrics.length > 30) this.metrics.pop();
         this.activeInteractions.delete(interactionId);
         this.reRenderCounters.delete(interactionId);
+        this.notifyListeners();
 
         if (this.isEnabled) {
           console.log(
@@ -132,6 +149,7 @@ class MobilePerfProfiler {
 
   public clearMetrics() {
     this.metrics = [];
+    this.notifyListeners();
   }
 }
 

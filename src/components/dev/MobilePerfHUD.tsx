@@ -13,12 +13,11 @@ export const MobilePerfHUD: React.FC = () => {
   const [isEnabled, setIsEnabled] = useState(mobilePerfProfiler.getIsEnabled());
 
   useEffect(() => {
-    const updateMetrics = () => {
-      setMetrics(mobilePerfProfiler.getMetrics());
-    };
-
-    const interval = setInterval(updateMetrics, 200);
-    return () => clearInterval(interval);
+    // Only subscribe to metric emissions; zero background intervals or CPU polling
+    const unsubscribe = mobilePerfProfiler.subscribe((newMetrics) => {
+      setMetrics(newMetrics);
+    });
+    return () => unsubscribe();
   }, []);
 
   if (!isEnabled && !isOpen) {
