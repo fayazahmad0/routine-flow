@@ -25,7 +25,7 @@ export const DashboardView: React.FC<DashboardViewProps> = React.memo(({
   onEditTask,
 }) => {
   const { userProfile } = useAuth();
-  const { todayDateStr, todayProgress } = useRoutine();
+  const { todayDateStr } = useRoutine();
 
   const getGreeting = () => {
     const hour = new Date().getHours();

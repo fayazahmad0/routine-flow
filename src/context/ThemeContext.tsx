@@ -5,6 +5,9 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { ThemePreference } from '../types';
+import { auth, db } from '../lib/firebase';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 
 interface ThemeContextType {
   theme: ThemePreference;
@@ -20,8 +23,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return saved || 'system';
   });
 
-  const [isDark, setIsDark] = useState<boolean>(false);
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    const saved = typeof window !== 'undefined' ? (localStorage.getItem('routineflow_theme') as ThemePreference) : null;
+    if (saved === 'dark') return true;
+    if (saved === 'light') return false;
+    return typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : false;
+  });
 
+  // Apply theme class to documentElement immediately
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     
@@ -38,8 +47,10 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setIsDark(dark);
       if (dark) {
         document.documentElement.classList.add('dark');
+        document.body.classList.add('dark');
       } else {
         document.documentElement.classList.remove('dark');
+        document.body.classList.remove('dark');
       }
     };
 
@@ -55,9 +66,41 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => mediaQuery.removeEventListener('change', listener);
   }, [theme]);
 
+  // Sync theme with user's profile in Firestore when auth is ready
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            if (data.theme && (data.theme === 'light' || data.theme === 'dark' || data.theme === 'system')) {
+              setThemeState(data.theme);
+              localStorage.setItem('routineflow_theme', data.theme);
+            }
+          }
+        } catch (e) {
+          // Graceful fallback
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   const setTheme = (newTheme: ThemePreference) => {
     setThemeState(newTheme);
     localStorage.setItem('routineflow_theme', newTheme);
+
+    // Persist to user's profile in Firestore if signed in
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      updateDoc(doc(db, 'users', currentUser.uid), {
+        theme: newTheme,
+      }).catch((e) => {
+        console.warn('Cloud theme update pending/deferred:', e);
+      });
+    }
   };
 
   return (

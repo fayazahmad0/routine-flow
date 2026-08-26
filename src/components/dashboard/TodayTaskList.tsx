@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, memo, useCallback, startTransition } from 'react';
+import React, { useState, memo, useCallback, startTransition, useRef, useEffect } from 'react';
 import { useRoutine } from '../../context/RoutineContext';
 import { Task, Category } from '../../types';
 import { IconRenderer } from '../common/IconRenderer';
@@ -28,8 +28,7 @@ interface TodayTaskRowProps {
   category?: Category;
   isMenuOpen: boolean;
   onToggle: (taskId: string, targetCompleted: boolean) => void;
-  onIncrement: (task: Task, nextValue: number) => void;
-  onDecrement: (task: Task, nextValue: number) => void;
+  onUpdateValue: (task: Task, nextValue: number) => void;
   onToggleMenu: (taskId: string) => void;
   onEditTask: (task: Task) => void;
   onArchiveTask: (taskId: string) => void;
@@ -44,69 +43,86 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
     category,
     isMenuOpen,
     onToggle,
-    onIncrement,
-    onDecrement,
+    onUpdateValue,
     onToggleMenu,
     onEditTask,
     onArchiveTask,
     onDeleteTask,
   }) => {
-    // 1. INSTANT LOCAL STATE WITH REFS: Ensures 0ms click-to-paint response before any context or network work
+    const hasStepper = task.type === 'duration' || task.type === 'quantity' || task.type === 'target';
     const initialVal = actualValue !== undefined ? actualValue : (completed ? (task.targetValue || 1) : 0);
+
+    // 1. ISOLATED LOCAL STATE: Drives 0ms instant UI updates without waiting for React Context or Firestore
     const [localCompleted, setLocalCompleted] = useState<boolean>(completed);
     const [localVal, setLocalVal] = useState<number>(initialVal);
 
-    // Synchronous refs to prevent stale closures and prop clobber during rapid tapping
-    const localValRef = React.useRef<number>(initialVal);
-    const localCompletedRef = React.useRef<boolean>(completed);
-    const isSteppingRef = React.useRef<boolean>(false);
-    const stepperDebounceRef = React.useRef<NodeJS.Timeout | null>(null);
-    const isMountedRef = React.useRef(true);
+    // Refs to track state synchronously during rapid taps & prevent prop clobbering
+    const localValRef = useRef<number>(initialVal);
+    const localCompletedRef = useRef<boolean>(completed);
+    const lastTapTimeRef = useRef<number>(0);
+    const syncDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const isMountedRef = useRef<boolean>(true);
 
-    React.useEffect(() => {
+    useEffect(() => {
       isMountedRef.current = true;
       return () => {
         isMountedRef.current = false;
-        if (stepperDebounceRef.current) {
-          clearTimeout(stepperDebounceRef.current);
+        if (syncDebounceTimerRef.current) {
+          clearTimeout(syncDebounceTimerRef.current);
         }
       };
     }, []);
 
-    // Sync upstream prop changes only when not actively tapping stepper
-    React.useEffect(() => {
-      if (!isSteppingRef.current) {
+    // Sync upstream prop changes only when not actively tapping (prevents jump/glitch)
+    useEffect(() => {
+      const timeSinceTap = Date.now() - lastTapTimeRef.current;
+      if (timeSinceTap > 1200) {
         setLocalCompleted(completed);
         localCompletedRef.current = completed;
       }
     }, [completed]);
 
-    React.useEffect(() => {
-      if (!isSteppingRef.current) {
+    useEffect(() => {
+      const timeSinceTap = Date.now() - lastTapTimeRef.current;
+      if (timeSinceTap > 1200) {
         const val = actualValue !== undefined ? actualValue : (completed ? (task.targetValue || 1) : 0);
         setLocalVal(val);
         localValRef.current = val;
       }
     }, [actualValue, completed, task.targetValue]);
 
-    const hasStepper = task.type === 'duration' || task.type === 'quantity' || task.type === 'target';
-    const lastTouchTimeRef = React.useRef<number>(0);
+    // Schedule background Firestore sync after rapid tapping settles
+    const scheduleBackgroundSync = useCallback(
+      (finalVal: number) => {
+        if (syncDebounceTimerRef.current) {
+          clearTimeout(syncDebounceTimerRef.current);
+        }
+        syncDebounceTimerRef.current = setTimeout(() => {
+          if (isMountedRef.current) {
+            startTransition(() => {
+              onUpdateValue(task, finalVal);
+            });
+          }
+        }, 250);
+      },
+      [onUpdateValue, task]
+    );
 
-    const handleTouchStart = () => {
-      lastTouchTimeRef.current = performance.now();
-    };
-
-    // Immediate synchronous checkbox tap handler
+    // ----------------------------------------------------
+    // CHECKBOX TAP HANDLER: 0ms Instant Local Toggle
+    // ----------------------------------------------------
     const handleCheckboxClick = (e: React.MouseEvent) => {
       e.stopPropagation();
-      const touchTime = lastTouchTimeRef.current || performance.now();
-      const interactionId = mobilePerfProfiler.startInteraction('checkbox', task.taskId, touchTime);
+      const now = performance.now();
+      lastTapTimeRef.current = Date.now();
+      const interactionId = mobilePerfProfiler.startInteraction('checkbox', task.taskId, now);
 
       const nextCompleted = !localCompletedRef.current;
       localCompletedRef.current = nextCompleted;
-      
-      // 0ms Synchronous local state update (React paints in current frame)
+
+      // 1. Immediate local state change
       setLocalCompleted(nextCompleted);
+
       if (hasStepper) {
         const nextVal = nextCompleted ? (task.targetValue || 1) : 0;
         localValRef.current = nextVal;
@@ -116,24 +132,28 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
       mobilePerfProfiler.recordStateUpdate(interactionId);
       mobilePerfProfiler.finishInteraction(interactionId);
 
-      // Decouple background context & cloud persistence outside the critical touch-paint frame
+      // 2. Background async sync
       startTransition(() => {
         onToggle(task.taskId, nextCompleted);
       });
     };
 
-    // Immediate synchronous stepper increment handler with debounced background sync
+    // ----------------------------------------------------
+    // STEPPER (+) INCREMENT HANDLER: 0ms Instant Local Increment
+    // ----------------------------------------------------
     const handleStepIncrement = (e: React.MouseEvent) => {
       e.stopPropagation();
-      const touchTime = lastTouchTimeRef.current || performance.now();
-      const interactionId = mobilePerfProfiler.startInteraction('plus', task.taskId, touchTime);
+      const now = performance.now();
+      lastTapTimeRef.current = Date.now();
+      const interactionId = mobilePerfProfiler.startInteraction('plus', task.taskId, now);
 
       const step = task.type === 'duration' && task.targetUnit?.toLowerCase().includes('min') ? 5 : 1;
       const nextVal = localValRef.current + step;
       localValRef.current = nextVal;
 
-      // 0ms Synchronous local state update - user sees new number instantly
+      // 1. Immediate local state change
       setLocalVal(nextVal);
+
       const isTargetMet = task.targetValue ? nextVal >= task.targetValue : nextVal > 0;
       if (isTargetMet !== localCompletedRef.current) {
         localCompletedRef.current = isTargetMet;
@@ -143,33 +163,26 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
       mobilePerfProfiler.recordStateUpdate(interactionId);
       mobilePerfProfiler.finishInteraction(interactionId);
 
-      // Coalesce rapid clicks into single background persistence call
-      isSteppingRef.current = true;
-      if (stepperDebounceRef.current) {
-        clearTimeout(stepperDebounceRef.current);
-      }
-      stepperDebounceRef.current = setTimeout(() => {
-        isSteppingRef.current = false;
-        if (isMountedRef.current) {
-          startTransition(() => {
-            onIncrement(task, localValRef.current);
-          });
-        }
-      }, 200);
+      // 2. Schedule debounced background Firestore persistence (coalesces rapid + + + + +)
+      scheduleBackgroundSync(nextVal);
     };
 
-    // Immediate synchronous stepper decrement handler with debounced background sync
+    // ----------------------------------------------------
+    // STEPPER (-) DECREMENT HANDLER: 0ms Instant Local Decrement
+    // ----------------------------------------------------
     const handleStepDecrement = (e: React.MouseEvent) => {
       e.stopPropagation();
-      const touchTime = lastTouchTimeRef.current || performance.now();
-      const interactionId = mobilePerfProfiler.startInteraction('minus', task.taskId, touchTime);
+      const now = performance.now();
+      lastTapTimeRef.current = Date.now();
+      const interactionId = mobilePerfProfiler.startInteraction('minus', task.taskId, now);
 
       const step = task.type === 'duration' && task.targetUnit?.toLowerCase().includes('min') ? 5 : 1;
       const nextVal = Math.max(0, localValRef.current - step);
       localValRef.current = nextVal;
 
-      // 0ms Synchronous local state update - user sees new number instantly
+      // 1. Immediate local state change
       setLocalVal(nextVal);
+
       const isTargetMet = task.targetValue ? nextVal >= task.targetValue : nextVal > 0;
       if (isTargetMet !== localCompletedRef.current) {
         localCompletedRef.current = isTargetMet;
@@ -179,19 +192,8 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
       mobilePerfProfiler.recordStateUpdate(interactionId);
       mobilePerfProfiler.finishInteraction(interactionId);
 
-      // Coalesce rapid clicks into single background persistence call
-      isSteppingRef.current = true;
-      if (stepperDebounceRef.current) {
-        clearTimeout(stepperDebounceRef.current);
-      }
-      stepperDebounceRef.current = setTimeout(() => {
-        isSteppingRef.current = false;
-        if (isMountedRef.current) {
-          startTransition(() => {
-            onDecrement(task, localValRef.current);
-          });
-        }
-      }, 200);
+      // 2. Schedule debounced background Firestore persistence (coalesces rapid - - - - -)
+      scheduleBackgroundSync(nextVal);
     };
 
     return (
@@ -210,8 +212,6 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
             {/* Touch-optimized 48x48px Checkbox Area with instant visual feedback */}
             <button
               type="button"
-              onPointerDown={handleTouchStart}
-              onTouchStart={handleTouchStart}
               onClick={handleCheckboxClick}
               id={`task-toggle-${task.taskId}`}
               className="min-w-[48px] min-h-[48px] -ml-2.5 -mt-2 p-2.5 flex items-center justify-center rounded-xl cursor-pointer group shrink-0 touch-manipulation active:scale-90 transition-transform duration-75"
@@ -246,8 +246,6 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
             {/* Task Title & Reminder */}
             <div
               className="min-w-0 flex-1 cursor-pointer pt-0.5 touch-manipulation"
-              onPointerDown={handleTouchStart}
-              onTouchStart={handleTouchStart}
               onClick={handleCheckboxClick}
             >
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
@@ -362,8 +360,6 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
             <div className="flex items-center bg-[#F2EDE4] dark:bg-[#252422] border border-[#DDD7CD] dark:border-[#353330] rounded-xl p-0.5 text-xs font-mono shadow-2xs shrink-0 ml-auto touch-manipulation">
               <button
                 type="button"
-                onPointerDown={handleTouchStart}
-                onTouchStart={handleTouchStart}
                 onClick={handleStepDecrement}
                 className="w-8 h-8 flex items-center justify-center text-[#57534E] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded-lg hover:bg-white dark:hover:bg-[#1A1918] active:scale-75 active:bg-white/90 dark:active:bg-[#1A1918] transition-transform duration-75 cursor-pointer touch-manipulation select-none"
                 aria-label="Decrease value"
@@ -378,8 +374,6 @@ const TodayTaskRow = memo<TodayTaskRowProps>(
 
               <button
                 type="button"
-                onPointerDown={handleTouchStart}
-                onTouchStart={handleTouchStart}
                 onClick={handleStepIncrement}
                 className="w-8 h-8 flex items-center justify-center text-[#57534E] dark:text-[#A39E96] hover:text-[#1A1A1A] dark:hover:text-[#F3EFEA] rounded-lg hover:bg-white dark:hover:bg-[#1A1918] active:scale-75 active:bg-white/90 dark:active:bg-[#1A1918] transition-transform duration-75 cursor-pointer touch-manipulation select-none"
                 aria-label="Increase value"
@@ -430,7 +424,7 @@ export const TodayTaskList: React.FC<TodayTaskListProps> = React.memo(({ onEditT
         setTimeout(() => {
           try {
             confetti({
-              particleCount: 24,
+              particleCount: 20,
               spread: 45,
               origin: { y: 0.85 },
               colors: ['#6366f1', '#10b981', '#f59e0b', '#ec4899'],
@@ -445,14 +439,7 @@ export const TodayTaskList: React.FC<TodayTaskListProps> = React.memo(({ onEditT
     [toggleTaskCompletion, todayDateStr]
   );
 
-  const handleIncrement = useCallback(
-    (task: Task, nextVal: number) => {
-      updateTaskActualValue(task.taskId, todayDateStr, nextVal);
-    },
-    [updateTaskActualValue, todayDateStr]
-  );
-
-  const handleDecrement = useCallback(
+  const handleUpdateValue = useCallback(
     (task: Task, nextVal: number) => {
       updateTaskActualValue(task.taskId, todayDateStr, nextVal);
     },
@@ -510,8 +497,7 @@ export const TodayTaskList: React.FC<TodayTaskListProps> = React.memo(({ onEditT
             category={getCategory(task.categoryId)}
             isMenuOpen={activeMenuTaskId === task.taskId}
             onToggle={handleToggle}
-            onIncrement={handleIncrement}
-            onDecrement={handleDecrement}
+            onUpdateValue={handleUpdateValue}
             onToggleMenu={handleToggleMenu}
             onEditTask={onEditTask}
             onArchiveTask={archiveTask}
