@@ -10,7 +10,7 @@ import { CheckCircle2, Clock, Flame, Sparkles } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export const TodayProgressCard: React.FC = React.memo(() => {
-  const { todayProgress, streakStats } = useRoutine();
+  const { todayProgress } = useRoutine();
   const { percentage, completedCount, totalCount, remainingCount } = todayProgress;
 
   const getStatusMessage = () => {

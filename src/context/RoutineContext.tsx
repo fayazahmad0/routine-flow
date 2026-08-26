@@ -396,21 +396,30 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return map;
   }, [completions]);
 
-  // Heavy computations deferred so they NEVER block 0ms task touch feedback
+  // Generate lightweight signature of completed task keys to avoid recalculating streaks during non-completion stepper increments
+  const completedKeySignature = useMemo(() => {
+    return completions
+      .filter((c) => c.completed)
+      .map((c) => `${c.taskId}_${c.localDate}`)
+      .sort()
+      .join('|');
+  }, [completions]);
+
+  // Heavy computations deferred & keyed to completion signature so they NEVER block 0ms task touch feedback
   const deferredCompletions = useDeferredValue(completions);
   const deferredTasks = useDeferredValue(tasks);
 
-  // Calculate Streaks (deferred)
+  // Calculate Streaks (deferred & stable across stepper clicks)
   const streakStats = useMemo(() => {
     return calculateOverallStreaks(deferredTasks, deferredCompletions, todayDateStr);
-  }, [deferredTasks, deferredCompletions, todayDateStr]);
+  }, [deferredTasks, completedKeySignature, todayDateStr]);
 
-  // Smart insights (deferred)
+  // Smart insights (deferred & stable across stepper clicks)
   const smartInsights = useMemo(() => {
     return generateSmartInsights(deferredTasks, deferredCompletions, todayDateStr, streakStats);
-  }, [deferredTasks, deferredCompletions, todayDateStr, streakStats]);
+  }, [deferredTasks, completedKeySignature, todayDateStr, streakStats]);
 
-  // Check achievements automatically (debounced so it never blocks UI tick)
+  // Check achievements automatically (deferred to idle time so it never contends with touch frame budgets)
   useEffect(() => {
     if (!user || tasks.length === 0) return;
     const timeoutId = setTimeout(() => {
@@ -441,7 +450,7 @@ export const RoutineProvider: React.FC<{ children: React.ReactNode }> = ({ child
           }
         }
       });
-    }, 600);
+    }, 2500);
 
     return () => clearTimeout(timeoutId);
   }, [tasks, completions, categories, streakStats, user, achievements, showToast]);
