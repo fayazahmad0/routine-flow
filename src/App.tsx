@@ -66,11 +66,12 @@ const AppContent: React.FC = () => {
   const handleCloseEditTask = React.useCallback(() => setEditingTask(null), []);
   const handleSelectTab = React.useCallback((tab: ActiveTab) => setActiveTab(tab), []);
 
+  // 1. Critical auth & profile resolution (lightweight branded skeleton)
   if (authLoading) {
     return <AppShellSkeleton />;
   }
 
-  // Not logged in
+  // 2. Not logged in -> Show Login View
   if (!user) {
     return (
       <>
@@ -80,6 +81,24 @@ const AppContent: React.FC = () => {
     );
   }
 
+  // 3. Brand new account / Onboarding required -> Show Focused Get Started View
+  if (!userProfile?.onboardingCompleted) {
+    return (
+      <>
+        <OnboardingModal />
+        {!isOnline && <OfflineBanner />}
+        {toast && (
+          <Toast
+            message={toast.message}
+            type={toast.type}
+            onClose={hideToast}
+          />
+        )}
+      </>
+    );
+  }
+
+  // 4. Authenticated existing user with completed onboarding -> Main Application
   const renderActiveView = () => {
     switch (activeTab) {
       case 'dashboard':
@@ -155,9 +174,6 @@ const AppContent: React.FC = () => {
         isOpen={editingTask !== null}
         onClose={handleCloseEditTask}
       />
-
-      {/* Onboarding Dialog for new users */}
-      <OnboardingModal />
 
       {/* Toast Notification */}
       {toast && (

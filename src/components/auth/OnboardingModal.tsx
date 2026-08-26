@@ -32,8 +32,8 @@ const GOAL_OPTIONS = [
 ];
 
 export const OnboardingModal: React.FC = () => {
-  const { userProfile, user, updateUserProfile, loading: authLoading } = useAuth();
-  const { tasks, createStarterRoutine, showToast, loading: routineLoading } = useRoutine();
+  const { userProfile, user, updateUserProfile } = useAuth();
+  const { createStarterRoutine, showToast } = useRoutine();
 
   const [step, setStep] = useState<number>(1);
   const [selectedGoals, setSelectedGoals] = useState<string[]>(['Study', 'Fitness', 'Sleep']);
@@ -42,12 +42,6 @@ export const OnboardingModal: React.FC = () => {
   );
   const [createStarter, setCreateStarter] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [isDismissed, setIsDismissed] = useState<boolean>(false);
-
-  // If still resolving auth/routine data, or if user already completed onboarding, or if user already has tasks, do not render
-  if (authLoading || routineLoading || !userProfile || userProfile.onboardingCompleted || tasks.length > 0 || isDismissed) {
-    return null;
-  }
 
   const toggleGoal = (id: string) => {
     setSelectedGoals((prev) =>
@@ -70,22 +64,26 @@ export const OnboardingModal: React.FC = () => {
         selectedGoals,
       });
 
-      setIsDismissed(true);
       showToast('Welcome to RoutineFlow! Your dashboard is ready.', 'success');
     } catch (err) {
-      console.error('Error completing onboarding:', err);
-      setIsDismissed(true);
+      console.error('[RoutineFlow Onboarding] Error completing onboarding:', err);
+      // Still ensure profile is marked complete locally to prevent blocking user
+      await updateUserProfile({
+        displayName: name,
+        onboardingCompleted: true,
+      }).catch(() => {});
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md">
+    <div className="min-h-screen bg-[#F9F8F6] dark:bg-[#121212] flex items-center justify-center p-4 sm:p-6 transition-colors">
       <motion.div
-        initial={{ opacity: 0, scale: 0.96 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-xl bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden"
+        initial={{ opacity: 0, y: 12, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.25, ease: 'easeOut' }}
+        className="w-full max-w-xl bg-white dark:bg-[#181716] rounded-3xl p-6 sm:p-8 shadow-xl border border-[#E8E3DA] dark:border-[#282725] overflow-hidden"
       >
         {/* Progress bar */}
         <div className="flex items-center gap-2 mb-6">

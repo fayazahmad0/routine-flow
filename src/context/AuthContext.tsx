@@ -65,26 +65,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const initialUser = auth.currentUser;
   const [user, setUser] = useState<FirebaseUser | null>(initialUser);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(() => {
-    if (initialUser) {
-      return {
-        uid: initialUser.uid,
-        displayName: initialUser.displayName || initialUser.phoneNumber || 'Friend',
-        email: initialUser.email || null,
-        phoneNumber: initialUser.phoneNumber || null,
-        photoURL: initialUser.photoURL || null,
-        createdAt: new Date().toISOString(),
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-        theme: 'system',
-        weekStartsOn: 'monday',
-        onboardingCompleted: true,
-        selectedGoals: ['Productivity', 'Health'],
-        notificationsEnabled: false,
-      };
-    }
-    return null;
-  });
-  const [loading, setLoading] = useState<boolean>(!initialUser);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -115,12 +97,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
   }, []);
 
-  // Listen to Auth State
+  // Listen to Auth State and resolve canonical profile before unblocking UI
   useEffect(() => {
     let unsubscribeProfile: (() => void) | undefined;
+    let isCancelled = false;
 
     // Fallback safety timer in case Firebase auth takes unusually long to determine state
     const authTimeout = setTimeout(() => {
+      if (isCancelled) return;
       setLoading((prevLoading) => {
         if (prevLoading) {
           console.warn('[RoutineFlow Auth] Auth state resolution reached timeout fallback; unblocking UI shell.');
@@ -137,7 +121,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
               theme: 'system',
               weekStartsOn: 'monday',
-              onboardingCompleted: false,
+              onboardingCompleted: true,
               selectedGoals: ['Productivity', 'Health'],
               notificationsEnabled: false,
             });
@@ -146,30 +130,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         return false;
       });
-    }, 1800);
+    }, 2800);
 
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
-      clearTimeout(authTimeout);
+      if (isCancelled) return;
 
       if (currentUser) {
         setUser(currentUser);
-        // Optimistically set profile so app shell can render immediately without waiting for network
-        setUserProfile((prev) => prev || {
-          uid: currentUser.uid,
-          displayName: currentUser.displayName || currentUser.phoneNumber || 'Friend',
-          email: currentUser.email || null,
-          phoneNumber: currentUser.phoneNumber || null,
-          photoURL: currentUser.photoURL || null,
-          createdAt: new Date().toISOString(),
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-          theme: 'system',
-          weekStartsOn: 'monday',
-          onboardingCompleted: true,
-          selectedGoals: ['Productivity', 'Health'],
-          notificationsEnabled: false,
-        });
-        // Unblock UI immediately
-        setLoading(false);
 
         const userDocRef = doc(db, 'users', currentUser.uid);
 
@@ -182,9 +149,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           unsubscribeProfile = onSnapshot(
             userDocRef,
             (snapshot) => {
+              if (isCancelled) return;
+              clearTimeout(authTimeout);
+
               if (snapshot.exists()) {
                 const cloudProfile = snapshot.data() as UserProfile;
-                setUserProfile(cloudProfile);
+                // Check canonical onboarding status:
+                // If explicitly true -> true
+                // If explicitly false -> false
+                // If undefined: if doc already exists from earlier sessions, default to true and persist
+                const isCompleted = cloudProfile.onboardingCompleted === true ||
+                  (cloudProfile.onboardingCompleted !== false && Boolean(cloudProfile.createdAt || cloudProfile.displayName));
+
+                const resolvedProfile: UserProfile = {
+                  ...cloudProfile,
+                  uid: currentUser.uid,
+                  onboardingCompleted: isCompleted,
+                };
+
+                // Backfill onboardingCompleted flag in Firestore if missing
+                if (cloudProfile.onboardingCompleted === undefined) {
+                  setDoc(userDocRef, { onboardingCompleted: isCompleted }, { merge: true }).catch(() => {});
+                }
+
+                setUserProfile(resolvedProfile);
+                setLoading(false);
               } else {
                 // Document does not exist in Firestore yet -> truly a brand new user
                 const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -204,21 +193,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 };
 
                 setUserProfile(initialNewProfile);
+                setLoading(false);
 
-                // Write initial new user profile doc
-                setDoc(userDocRef, initialNewProfile).catch((writeErr) => {
-                  console.warn('Initial user profile doc creation notice:', writeErr);
+                // Write canonical initial new user profile doc
+                setDoc(userDocRef, initialNewProfile, { merge: true }).catch((writeErr) => {
+                  console.warn('[RoutineFlow Auth] Initial user profile doc creation notice:', writeErr);
                 });
               }
             },
             (err) => {
-              console.warn('User profile snapshot fallback active:', err);
+              if (isCancelled) return;
+              clearTimeout(authTimeout);
+              console.warn('[RoutineFlow Auth] User profile snapshot listener error / offline mode:', err);
+              // Fallback to avoid blocking user
+              setUserProfile((prev) => prev || {
+                uid: currentUser.uid,
+                displayName: currentUser.displayName || 'Friend',
+                email: currentUser.email || null,
+                phoneNumber: currentUser.phoneNumber || null,
+                photoURL: currentUser.photoURL || null,
+                createdAt: new Date().toISOString(),
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+                theme: 'system',
+                weekStartsOn: 'monday',
+                onboardingCompleted: true,
+                selectedGoals: ['Productivity', 'Health'],
+                notificationsEnabled: false,
+              });
+              setLoading(false);
             }
           );
         } catch (err) {
-          console.warn('Profile listener initialization error:', err);
+          if (isCancelled) return;
+          clearTimeout(authTimeout);
+          console.warn('[RoutineFlow Auth] Profile listener initialization error:', err);
+          setLoading(false);
         }
       } else {
+        clearTimeout(authTimeout);
         if (unsubscribeProfile) {
           unsubscribeProfile();
           unsubscribeProfile = undefined;
@@ -230,6 +242,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     return () => {
+      isCancelled = true;
       clearTimeout(authTimeout);
       unsubscribeAuth();
       if (unsubscribeProfile) {
