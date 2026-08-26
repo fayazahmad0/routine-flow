@@ -63,9 +63,28 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const initialUser = auth.currentUser;
+  const [user, setUser] = useState<FirebaseUser | null>(initialUser);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(() => {
+    if (initialUser) {
+      return {
+        uid: initialUser.uid,
+        displayName: initialUser.displayName || initialUser.phoneNumber || 'Friend',
+        email: initialUser.email || null,
+        phoneNumber: initialUser.phoneNumber || null,
+        photoURL: initialUser.photoURL || null,
+        createdAt: new Date().toISOString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+        theme: 'system',
+        weekStartsOn: 'monday',
+        onboardingCompleted: true,
+        selectedGoals: ['Productivity', 'Health'],
+        notificationsEnabled: false,
+      };
+    }
+    return null;
+  });
+  const [loading, setLoading] = useState<boolean>(!initialUser);
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -134,6 +153,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (currentUser) {
         setUser(currentUser);
+        // Optimistically set profile so app shell can render immediately without waiting for network
+        setUserProfile((prev) => prev || {
+          uid: currentUser.uid,
+          displayName: currentUser.displayName || currentUser.phoneNumber || 'Friend',
+          email: currentUser.email || null,
+          phoneNumber: currentUser.phoneNumber || null,
+          photoURL: currentUser.photoURL || null,
+          createdAt: new Date().toISOString(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+          theme: 'system',
+          weekStartsOn: 'monday',
+          onboardingCompleted: true,
+          selectedGoals: ['Productivity', 'Health'],
+          notificationsEnabled: false,
+        });
+        // Unblock UI immediately
+        setLoading(false);
+
         const userDocRef = doc(db, 'users', currentUser.uid);
 
         if (unsubscribeProfile) {
@@ -148,7 +185,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               if (snapshot.exists()) {
                 const cloudProfile = snapshot.data() as UserProfile;
                 setUserProfile(cloudProfile);
-                setLoading(false);
               } else {
                 // Document does not exist in Firestore yet -> truly a brand new user
                 const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -168,7 +204,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 };
 
                 setUserProfile(initialNewProfile);
-                setLoading(false);
 
                 // Write initial new user profile doc
                 setDoc(userDocRef, initialNewProfile).catch((writeErr) => {
@@ -178,27 +213,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             },
             (err) => {
               console.warn('User profile snapshot fallback active:', err);
-              // Fallback to basic profile so UI does not hang
-              setUserProfile((prev) => prev || {
-                uid: currentUser.uid,
-                displayName: currentUser.displayName || currentUser.phoneNumber || 'Friend',
-                email: currentUser.email || null,
-                phoneNumber: currentUser.phoneNumber || null,
-                photoURL: currentUser.photoURL || null,
-                createdAt: new Date().toISOString(),
-                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-                theme: 'system',
-                weekStartsOn: 'monday',
-                onboardingCompleted: true,
-                selectedGoals: ['Productivity', 'Health'],
-                notificationsEnabled: false,
-              });
-              setLoading(false);
             }
           );
         } catch (err) {
           console.warn('Profile listener initialization error:', err);
-          setLoading(false);
         }
       } else {
         if (unsubscribeProfile) {

@@ -43,6 +43,7 @@ const SettingsView = React.lazy(() =>
 // Modals
 import { AddTaskModal } from './components/tasks/AddTaskModal';
 import { EditTaskModal } from './components/tasks/EditTaskModal';
+import { AppShellSkeleton } from './components/common/AppShellSkeleton';
 import { Sparkles, Loader2 } from 'lucide-react';
 
 const ViewLoadingFallback = () => (
@@ -66,19 +67,7 @@ const AppContent: React.FC = () => {
   const handleSelectTab = React.useCallback((tab: ActiveTab) => setActiveTab(tab), []);
 
   if (authLoading) {
-    return (
-      <div className="min-h-screen bg-[#F9F8F6] dark:bg-[#121212] flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-12 h-12 rounded-2xl bg-[#1A1A1A] dark:bg-[#F3EFEA] text-[#F9F8F6] dark:text-[#121212] flex items-center justify-center mb-4 shadow-sm animate-pulse">
-          <Sparkles className="w-6 h-6" />
-        </div>
-        <h2 className="font-serif text-2xl font-semibold tracking-tight text-[#1A1A1A] dark:text-[#F3EFEA]">
-          RoutineFlow
-        </h2>
-        <p className="text-xs uppercase tracking-widest text-[#78716C] dark:text-[#A39E96] mt-1 font-mono">
-          Loading your journal...
-        </p>
-      </div>
-    );
+    return <AppShellSkeleton />;
   }
 
   // Not logged in

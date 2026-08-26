@@ -173,9 +173,11 @@ const TodayTaskRowComponent: React.FC<TodayTaskRowProps> = ({
     mobilePerfProfiler.recordStateUpdate(interactionId);
     mobilePerfProfiler.finishInteraction(interactionId);
 
-    // Light celebratory burst if completed
+    // Light celebratory burst scheduled purely after paint so it NEVER blocks touch/paint
     if (nextCompleted) {
-      fireLightweightConfetti();
+      setTimeout(() => {
+        fireLightweightConfetti();
+      }, 120);
     }
 
     // 2. Coalesced background sync
@@ -202,9 +204,6 @@ const TodayTaskRowComponent: React.FC<TodayTaskRowProps> = ({
     if (isTargetMet !== localCompletedRef.current) {
       localCompletedRef.current = isTargetMet;
       setLocalCompleted(isTargetMet);
-      if (isTargetMet) {
-        fireLightweightConfetti();
-      }
     }
 
     mobilePerfProfiler.recordStateUpdate(interactionId);
@@ -243,12 +242,13 @@ const TodayTaskRowComponent: React.FC<TodayTaskRowProps> = ({
     scheduleBackgroundSync(nextVal);
   };
 
-  // Calculate progress percent for target/duration tasks
-  const progressPercent = task.targetValue
-    ? Math.min(100, Math.round((localVal / task.targetValue) * 100))
+  // Calculate progress ratio (0 to 1) and percentage (0 to 100) for target/duration tasks
+  const progressRatio = task.targetValue && task.targetValue > 0
+    ? Math.min(1, Math.max(0, localVal / task.targetValue))
     : localCompleted
-    ? 100
+    ? 1
     : 0;
+  const progressPercent = Math.round(progressRatio * 100);
 
   return (
     <div
@@ -433,12 +433,16 @@ const TodayTaskRowComponent: React.FC<TodayTaskRowProps> = ({
           </div>
           <div className="h-1.5 w-full bg-[#EAE4D9] dark:bg-[#282725] rounded-full overflow-hidden">
             <div
-              className={`h-full transition-all duration-300 rounded-full ${
+              className={`h-full w-full rounded-full transition-transform duration-300 ease-out ${
                 progressPercent >= 100
                   ? 'bg-[#2D5A43] dark:bg-[#68B087]'
                   : 'bg-[#A04000] dark:bg-[#E08A50]'
               }`}
-              style={{ width: `${progressPercent}%` }}
+              style={{
+                transform: `scaleX(${progressRatio})`,
+                transformOrigin: 'left center',
+                willChange: 'transform',
+              }}
             />
           </div>
         </div>
